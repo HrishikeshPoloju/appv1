@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.schoolapp.android.data.AdminNotice
 import com.schoolapp.android.data.DiscussionRepository
@@ -48,18 +49,23 @@ fun StudentFirstTimeLoginScreen(
     var fullName by remember { mutableStateOf("") }
     var selectedClass by remember { mutableStateOf("Class 10") }
     var selectedSection by remember { mutableStateOf("A") }
-    var parentPhone by remember { mutableStateOf("+91 ") }
+    var parentPhone by remember { mutableStateOf("") }
     var parentEmail by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var showCautionDialog by remember { mutableStateOf(false) }
+
+    val formattedParentPhone = remember(parentPhone) {
+        val digits = parentPhone.filter { it.isDigit() }.take(10)
+        if (digits.isNotBlank()) "+91 $digits" else ""
+    }
 
     if (showCautionDialog) {
         StudentVerificationCautionDialog(
             fullName = fullName.trim(),
             className = selectedClass,
             section = selectedSection,
-            parentPhone = parentPhone.trim(),
+            parentPhone = formattedParentPhone,
             parentEmail = parentEmail.trim(),
             address = address.trim(),
             onDismiss = { showCautionDialog = false },
@@ -69,7 +75,7 @@ fun StudentFirstTimeLoginScreen(
                     fullName.trim(),
                     selectedClass,
                     selectedSection,
-                    parentPhone.trim(),
+                    formattedParentPhone,
                     parentEmail.trim(),
                     address.trim()
                 )
@@ -305,7 +311,7 @@ fun StudentFirstTimeLoginScreen(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Text(
-                        text = "4. Parent / Guardian Mobile Number *",
+                        text = "4. Parent / Guardian Mobile Number (Strict 10 Digits) *",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = GenesisColors.TextPrimary
@@ -313,15 +319,47 @@ fun StudentFirstTimeLoginScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedTextField(
                         value = parentPhone,
-                        onValueChange = {
-                            parentPhone = it
+                        onValueChange = { input ->
+                            // Strictly allow only up to 10 digits
+                            val digits = input.filter { it.isDigit() }.take(10)
+                            parentPhone = digits
                             errorMsg = null
                         },
-                        placeholder = { Text("+91 98765 43210", fontSize = 13.sp) },
+                        placeholder = { Text("9876543210 (10 digits)", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Call, contentDescription = null, tint = GenesisColors.Success)
+                            Row(
+                                modifier = Modifier.padding(start = 12.dp, end = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Call, contentDescription = null, tint = GenesisColors.Success, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "+91",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GenesisColors.TextPrimary
+                                )
+                            }
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        supportingText = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (parentPhone.length == 10) "✓ Valid 10-digit number" else "Enter exactly 10 digits",
+                                    color = if (parentPhone.length == 10) GenesisColors.Success else GenesisColors.TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "${parentPhone.length}/10",
+                                    color = if (parentPhone.length == 10) GenesisColors.Success else GenesisColors.TextSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -450,13 +488,13 @@ fun StudentFirstTimeLoginScreen(
 
                     Button(
                         onClick = {
-                            val digitCount = parentPhone.count { it.isDigit() }
+                            val digits = parentPhone.filter { it.isDigit() }
                             when {
                                 fullName.trim().length < 2 -> {
                                     errorMsg = "Please enter your full name according to school records."
                                 }
-                                digitCount < 10 -> {
-                                    errorMsg = "Please enter a valid 10-digit Parent Mobile Number."
+                                digits.length != 10 -> {
+                                    errorMsg = "Please enter a strict 10-digit Parent Mobile Number (currently ${digits.length}/10 digits)."
                                 }
                                 address.trim().length < 5 -> {
                                     errorMsg = "Please enter your address or tap 'Fetch My Current Location Address'."
@@ -498,124 +536,114 @@ fun StudentVerificationCautionDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth()
+            shape = RoundedCornerShape(22.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 20.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(18.dp)
             ) {
-                Box(
+                // Scrollable content area so buttons are pinned and never cut off
+                Column(
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(Color(0xFFFEF3C7), CircleShape),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        imageVector = if (isTeacherOverride) Icons.Default.VerifiedUser else Icons.Default.WarningAmber,
-                        contentDescription = "Caution",
-                        tint = Color(0xFFD97706),
-                        modifier = Modifier.size(30.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color(0xFFFEF3C7), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isTeacherOverride) Icons.Default.VerifiedUser else Icons.Default.WarningAmber,
+                            contentDescription = "Caution",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = if (isTeacherOverride) "Confirm Teacher Student Update" else "Re-verify Before Profile Lock",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.TextPrimary,
+                        textAlign = TextAlign.Center
                     )
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = if (isTeacherOverride) "Confirm Teacher Student Update" else "Re-verify Before Profile Lock",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GenesisColors.TextPrimary,
-                    textAlign = TextAlign.Center
-                )
+                    Text(
+                        text = if (isTeacherOverride) {
+                            "You are updating this student's official school record as a Teacher/Admin. The student's isolated study notes and classroom discussion feed will immediately switch to this Class & Section."
+                        } else {
+                            "STRICT WARNING: Your login will appear on the $className-$section Class Teacher Verification Roster. Please verify your Full Name, Class, and Section carefully."
+                        },
+                        fontSize = 12.sp,
+                        color = GenesisColors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = if (isTeacherOverride) {
-                        "You are updating this student's official school record as a Teacher/Admin. The student's isolated study notes and classroom discussion feed will immediately switch to this Class & Section."
-                    } else {
-                        "STRICT WARNING: Your login will appear on the $className-$section Class Teacher Verification Roster. Please verify your Full Name, Class, and Section carefully."
-                    },
-                    fontSize = 12.sp,
-                    color = GenesisColors.TextSecondary,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 18.sp
-                )
+                    if (!isTeacherOverride) {
+                        Surface(
+                            color = Color(0xFFFEF2F2),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Block,
+                                    contentDescription = null,
+                                    tint = GenesisColors.Emergency,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Class Teachers verify every student in the classroom. Suspected or wrong-section accounts will be BLOCKED by the teacher, and Class/Section will be locked after confirmation.",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GenesisColors.Emergency,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (!isTeacherOverride) {
                     Surface(
-                        color = Color(0xFFFEF2F2),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Block,
-                                contentDescription = null,
-                                tint = GenesisColors.Emergency,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Class Teachers verify every student in the classroom. Suspected or wrong-section accounts will be BLOCKED by the teacher, and Class/Section will be locked after confirmation.",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = GenesisColors.Emergency,
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                Surface(
-                    color = Color(0xFFF8FAFC),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Student Full Name:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                            Text(fullName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Divider(color = GenesisColors.Border)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Selected Class:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                            Text(className, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Primary)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Divider(color = GenesisColors.Border)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Selected Section:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                            Text("Section $section", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.ClassroomPurple)
-                        }
-                        if (parentPhone.isNotBlank()) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Student Full Name:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                Text(fullName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
                             Divider(color = GenesisColors.Border)
                             Spacer(modifier = Modifier.height(8.dp))
@@ -623,11 +651,9 @@ fun StudentVerificationCautionDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Parent Contact:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                                Text(parentPhone, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Success)
+                                Text("Selected Class:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                Text(className, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Primary)
                             }
-                        }
-                        if (parentEmail.isNotBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Divider(color = GenesisColors.Border)
                             Spacer(modifier = Modifier.height(8.dp))
@@ -635,35 +661,69 @@ fun StudentVerificationCautionDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Parent Email:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                                Text(parentEmail, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
+                                Text("Selected Section:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                Text("Section $section", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.ClassroomPurple)
                             }
-                        }
-                        if (address.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Divider(color = GenesisColors.Border)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Address:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(address, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GenesisColors.TextPrimary)
+                            if (parentPhone.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Divider(color = GenesisColors.Border)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Parent Contact:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                    Text(parentPhone, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Success)
+                                }
+                            }
+                            if (parentEmail.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Divider(color = GenesisColors.Border)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Parent Email:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                    Text(parentEmail, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
+                                }
+                            }
+                            if (address.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Divider(color = GenesisColors.Border)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Address:", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(address, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = GenesisColors.TextPrimary)
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
+                // Bottom Buttons pinned: Guaranteed visible with explicit contrast and zero vertical clipping
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Text("Edit / Recheck", color = GenesisColors.Primary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text(
+                            text = "Edit / Recheck",
+                            color = GenesisColors.Primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
+                        )
                     }
                     Button(
                         onClick = onConfirm,
@@ -671,13 +731,16 @@ fun StudentVerificationCautionDialog(
                             .weight(1f)
                             .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Success)
+                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Success),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            if (isTeacherOverride) "Save Update" else "Lock & Confirm",
+                            text = if (isTeacherOverride) "Save Update" else "Lock & Confirm",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
