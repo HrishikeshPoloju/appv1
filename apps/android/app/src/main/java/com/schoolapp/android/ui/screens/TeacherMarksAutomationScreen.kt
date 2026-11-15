@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -68,6 +70,8 @@ fun TeacherMarksAutomationScreen(
     var newSubjectNameInput by remember { mutableStateOf("") }
     var newSubjectMaxMarksInput by remember { mutableStateOf("100") }
     var subjectDropdownOpen by remember { mutableStateOf(false) }
+
+    var showGradeScaleDialog by remember { mutableStateOf(false) }
 
     val classSubjects = classSubjectsMap[selectedClass.id]
         ?: DiscussionRepository.getSubjectsForClass(selectedClass.id)
@@ -292,6 +296,247 @@ fun TeacherMarksAutomationScreen(
         }
     }
 
+    // --- View Grade Rules & Marks Range Dialog for Selected Exam ---
+    if (showGradeScaleDialog) {
+        val maxInt = maxMarksInput.toIntOrNull()?.coerceAtLeast(1) ?: 100
+        var testMarkInput by remember { mutableStateOf("") }
+        val testMarkInt = testMarkInput.toIntOrNull()?.coerceIn(0, maxInt)
+        val testGrade = testMarkInt?.let { SchoolGradingPolicy.assignGrade((it * 100.0) / maxInt) }
+
+        data class GradeTier(
+            val grade: String,
+            val minPct: Double,
+            val maxPct: Double,
+            val badgeColor: Color,
+            val bgColor: Color,
+            val remarks: String
+        )
+
+        val tiers = listOf(
+            GradeTier("A1", 91.0, 100.0, Color(0xFF15803D), Color(0xFFDCFCE7), "Outstanding"),
+            GradeTier("A2", 81.0, 90.0, Color(0xFF16A34A), Color(0xFFF0FDF4), "Excellent"),
+            GradeTier("B1", 71.0, 80.0, Color(0xFF2563EB), Color(0xFFDBEAFE), "Very Good"),
+            GradeTier("B2", 61.0, 70.0, Color(0xFF0284C7), Color(0xFFE0F2FE), "Good"),
+            GradeTier("C1", 51.0, 60.0, Color(0xFFD97706), Color(0xFFFEF3C7), "Satisfactory"),
+            GradeTier("C2", 41.0, 50.0, Color(0xFFEA580C), Color(0xFFFFEDD5), "Average"),
+            GradeTier("D", 33.0, 40.0, Color(0xFF9333EA), Color(0xFFF3E8FF), "Passing Grade"),
+            GradeTier("E", 0.0, 32.0, Color(0xFFDC2626), Color(0xFFFEE2E2), "Needs Improvement")
+        )
+
+        Dialog(onDismissRequest = { showGradeScaleDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(18.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Top Row: Title + Close (X)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Grading Scale & Marks Range",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$selectedExam • Max Marks: $maxInt",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GenesisColors.Primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { showGradeScaleDialog = false },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = GenesisColors.TextSecondary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Grades for $selectedExam ($selectedSubject) are auto-calculated according to school policy based on $maxInt max marks:",
+                            fontSize = 11.sp,
+                            color = GenesisColors.TextSecondary,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Table Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Grade", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextSecondary, modifier = Modifier.width(42.dp))
+                        Text("Marks Range", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextSecondary, modifier = Modifier.weight(1.3f))
+                        Text("% Range", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextSecondary, modifier = Modifier.weight(1.1f))
+                        Text("Remarks", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextSecondary, modifier = Modifier.weight(1.3f))
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Grade Rows
+                    tiers.forEach { tier ->
+                        val minMark = kotlin.math.round((tier.minPct * maxInt) / 100.0).toInt().coerceIn(0, maxInt)
+                        val maxMark = kotlin.math.round((tier.maxPct * maxInt) / 100.0).toInt().coerceIn(0, maxInt)
+                        val rangeDisplay = if (tier.grade == "E") {
+                            val upper = kotlin.math.max(0, kotlin.math.round((32.0 * maxInt) / 100.0).toInt())
+                            "0 – $upper"
+                        } else {
+                            "$minMark – $maxMark"
+                        }
+                        val pctDisplay = if (tier.grade == "E") "< 33%" else "${tier.minPct.toInt()}%–${tier.maxPct.toInt()}%"
+
+                        Surface(
+                            color = Color.White,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = tier.bgColor,
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, tier.badgeColor.copy(alpha = 0.35f)),
+                                    modifier = Modifier.width(36.dp)
+                                ) {
+                                    Text(
+                                        text = tier.grade,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = tier.badgeColor,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = rangeDisplay,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GenesisColors.TextPrimary,
+                                    modifier = Modifier.weight(1.3f)
+                                )
+                                Text(
+                                    text = pctDisplay,
+                                    fontSize = 11.sp,
+                                    color = GenesisColors.TextSecondary,
+                                    modifier = Modifier.weight(1.1f)
+                                )
+                                Text(
+                                    text = tier.remarks,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = tier.badgeColor,
+                                    modifier = Modifier.weight(1.3f)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Quick Interactive Mark Tester
+                    Surface(
+                        color = Color(0xFFEFF6FF),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "🎯 Live Mark-to-Grade Calculator",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.Primary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = testMarkInput,
+                                    onValueChange = { raw ->
+                                        testMarkInput = raw.filter { it.isDigit() }.take(3)
+                                    },
+                                    placeholder = { Text("Test mark (0-$maxInt)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                if (testGrade != null && testMarkInt != null) {
+                                    val pct = (testMarkInt * 100.0) / maxInt
+                                    Surface(
+                                        color = Color(0xFFDCFCE7),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                                    ) {
+                                        Text(
+                                            text = "Grade: $testGrade (%.0f%%)".format(pct),
+                                            color = Color(0xFF15803D),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { showGradeScaleDialog = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                    ) {
+                        Text("Close", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -439,7 +684,39 @@ fun TeacherMarksAutomationScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Quick Button to open the Grading Scale & Marks Range pop-up for the selected exam
+                Surface(
+                    color = Color(0xFFF0FDF4),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showGradeScaleDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Grade, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Grading Scale & Marks Range ($selectedExam)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF166534)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("View", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             if (selectedTab == 0) {
@@ -650,7 +927,9 @@ fun TeacherMarksAutomationScreen(
                         color = Color(0xFFEFF6FF),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showGradeScaleDialog = true }
                     ) {
                         Row(
                             modifier = Modifier.padding(12.dp),
@@ -658,12 +937,21 @@ fun TeacherMarksAutomationScreen(
                         ) {
                             Icon(Icons.Default.Bolt, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Enter marks once — totals, %, school grades, PDF report cards & student history update automatically.",
-                                fontSize = 12.sp,
-                                color = GenesisColors.MeteorBlack,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Enter marks once — totals, %, school grades, PDF report cards & student history update automatically.",
+                                    fontSize = 12.sp,
+                                    color = GenesisColors.MeteorBlack,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "Tap to view Grade Rules & Marks Range for $selectedExam ➔",
+                                    fontSize = 11.sp,
+                                    color = GenesisColors.Primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))

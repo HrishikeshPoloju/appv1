@@ -606,7 +606,6 @@ fun HomeScreen(
                                         onNavigateToTab(1)
                                     }
                                     "Holidays" -> subRoute = HomeSubRoute.CALENDAR
-                                    "AI Copilot" -> subRoute = HomeSubRoute.AI_ASSISTANT
                                 }
                             }
                         )
@@ -856,8 +855,7 @@ private fun TeacherShortcutTilesGrid(
         ShortcutTileData("Staff Leave", Icons.Default.EventBusy, Color(0xFFD97706), Color(0xFFFEF3C7)),
         ShortcutTileData("Class Doubts", Icons.Default.Forum, Color(0xFF0284C7), Color(0xFFE0F2FE)),
         ShortcutTileData("Upload Notes", Icons.Default.PictureAsPdf, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "PDF"),
-        ShortcutTileData("Holidays", Icons.Default.EventNote, Color(0xFF16A34A), Color(0xFFDCFCE7)),
-        ShortcutTileData("AI Copilot", Icons.Default.Bolt, Color(0xFF10A37F), Color(0xFFECFDF5))
+        ShortcutTileData("Holidays", Icons.Default.EventNote, Color(0xFF16A34A), Color(0xFFDCFCE7))
     )
     ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
 }
@@ -4014,18 +4012,6 @@ fun FormsScreen(
                                 subtitle = "Declare Total School, Class-specific or Section-specific holidays",
                                 icon = Icons.Default.EventNote,
                                 onClick = { subRoute = FormsSubRoute.CALENDAR }
-                            )
-                            ServiceMenuCard(
-                                title = "Substitution & Timetable Helper",
-                                subtitle = "View assigned period covers & conflict-free substitutes",
-                                icon = Icons.Default.SwapHoriz,
-                                onClick = { subRoute = FormsSubRoute.SUBSTITUTION_HUB }
-                            )
-                            ServiceMenuCard(
-                                title = "AI Paper & Lesson Copilot",
-                                subtitle = "Generate question papers, worksheets & parent messages",
-                                icon = Icons.Default.Bolt,
-                                onClick = { subRoute = FormsSubRoute.AI_ASSISTANT }
                             )
                             ServiceMenuCard(
                                 title = "Service Request Approvals",

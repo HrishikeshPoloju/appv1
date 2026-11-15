@@ -528,9 +528,7 @@ fun RoleSpecificSmartDashboardSection(
                             if (myPendingStaffLeaves > 0) "Staff Leave ($myPendingStaffLeaves)" else "Apply Leave",
                             Icons.Default.EventBusy
                         ) { onOpenStaffHr(2) },
-                        Triple("Holiday Calendar", Icons.Default.EventNote, onOpenCalendar),
-                        Triple("Substitution Hub", Icons.Default.SwapHoriz, onOpenSubstitutionHub),
-                        Triple("AI Paper Copilot", Icons.Default.Bolt, onOpenAiAssistant)
+                        Triple("Holiday Calendar", Icons.Default.EventNote, onOpenCalendar)
                     )
 
                     teacherActions.chunked(2).forEach { row ->
