@@ -348,12 +348,16 @@ fun HomeScreen(
             )
         }
         HomeSubRoute.ADMIN_SIBLINGS -> {
-            AdminSiblingsHubScreen(
-                onBack = { subRoute = HomeSubRoute.FEED }
-            )
+            if (currentRole == AppRole.ADMIN) {
+                AdminSiblingsHubScreen(
+                    onBack = { subRoute = HomeSubRoute.FEED }
+                )
+            } else {
+                subRoute = HomeSubRoute.FEED
+            }
         }
         HomeSubRoute.FEED -> {
-            if (showSiblingsPopup && !isSiblingsFormSubmitted) {
+            if (showSiblingsPopup && !isSiblingsFormSubmitted && currentRole != AppRole.ADMIN && currentRole != AppRole.TEACHER) {
                 SiblingsCaptureDialog(onDismiss = { showSiblingsPopup = false })
             }
 
@@ -551,65 +555,89 @@ fun HomeScreen(
                 }
             }
 
-            // 5. Role-Focused Feature Tiles (Teacher tiles vs Student/Parent/Admin tiles)
+            // 5. Role-Focused Feature Tiles (Admin tiles vs Teacher tiles vs Student/Parent tiles)
             item {
-                if (currentRole == AppRole.TEACHER) {
-                    TeacherShortcutTilesGrid(
-                        onShortcutClick = { label ->
-                            when (label) {
-                                "Roll Call" -> subRoute = HomeSubRoute.ATTENDANCE
-                                "Auto Marks" -> subRoute = HomeSubRoute.MARKS_AUTOMATION
-                                "Assignments" -> subRoute = HomeSubRoute.ASSIGNMENTS
-                                "Exam Schedule" -> subRoute = HomeSubRoute.EXAM_SCHEDULE
-                                "Student Control" -> subRoute = HomeSubRoute.SECTION_VERIFICATION
-                                "My Attendance" -> {
-                                    staffHrInitialTab = 1
-                                    subRoute = HomeSubRoute.STAFF_HR
+                when (currentRole) {
+                    AppRole.ADMIN -> {
+                        AdminShortcutTilesGrid(
+                            onShortcutClick = { label ->
+                                when (label) {
+                                    "Sibling Leads" -> subRoute = HomeSubRoute.ADMIN_SIBLINGS
+                                    "Student Control" -> subRoute = HomeSubRoute.SECTION_VERIFICATION
+                                    "Staff HR" -> {
+                                        staffHrInitialTab = 0
+                                        subRoute = HomeSubRoute.STAFF_HR
+                                    }
+                                    "Roll Call" -> subRoute = HomeSubRoute.ATTENDANCE
+                                    "Auto Marks" -> subRoute = HomeSubRoute.MARKS_AUTOMATION
+                                    "Assignments" -> subRoute = HomeSubRoute.ASSIGNMENTS
+                                    "Exam Schedule" -> subRoute = HomeSubRoute.EXAM_SCHEDULE
+                                    "Fee Structure" -> subRoute = HomeSubRoute.FEE_STRUCTURE
+                                    "Digital ID" -> subRoute = HomeSubRoute.DIGITAL_ID
+                                    "Calendar" -> subRoute = HomeSubRoute.CALENDAR
+                                    "AI Copilot" -> subRoute = HomeSubRoute.AI_ASSISTANT
                                 }
-                                "Staff Leave" -> {
-                                    staffHrInitialTab = 2
-                                    subRoute = HomeSubRoute.STAFF_HR
-                                }
-                                "Class Doubts" -> {
-                                    NavigationBridge.pendingMyClassTab = 0
-                                    onNavigateToTab(1)
-                                }
-                                "Upload Notes" -> {
-                                    NavigationBridge.pendingMyClassTab = 1
-                                    onNavigateToTab(1)
-                                }
-                                "Holidays" -> subRoute = HomeSubRoute.CALENDAR
-                                "AI Copilot" -> subRoute = HomeSubRoute.AI_ASSISTANT
-                                "Sibling Leads" -> subRoute = HomeSubRoute.ADMIN_SIBLINGS
                             }
-                        }
-                    )
-                } else {
-                    ShortcutTilesGrid(
-                        onShortcutClick = { label ->
-                            when (label) {
-                                "Homework", "Assignments" -> subRoute = HomeSubRoute.ASSIGNMENTS
-                                "Timetable", "Exam Schedule" -> subRoute = HomeSubRoute.EXAM_SCHEDULE
-                                "Attendance" -> subRoute = HomeSubRoute.ATTENDANCE
-                                "Result", "Report Card" -> subRoute = HomeSubRoute.REPORT_CARD
-                                "Practice Tests", "Online Exams" -> subRoute = HomeSubRoute.ONLINE_QUIZ
-                                "Mistakes", "Mistake Analysis" -> subRoute = HomeSubRoute.MISTAKE_ANALYSIS
-                                "Sibling Leads", "Siblings" -> subRoute = HomeSubRoute.ADMIN_SIBLINGS
-                                "Fee Structure" -> subRoute = HomeSubRoute.FEE_STRUCTURE
-                                "Study Notes" -> {
-                                    NavigationBridge.pendingMyClassTab = 1
-                                    onNavigateToTab(1)
+                        )
+                    }
+                    AppRole.TEACHER -> {
+                        TeacherShortcutTilesGrid(
+                            onShortcutClick = { label ->
+                                when (label) {
+                                    "Roll Call" -> subRoute = HomeSubRoute.ATTENDANCE
+                                    "Auto Marks" -> subRoute = HomeSubRoute.MARKS_AUTOMATION
+                                    "Assignments" -> subRoute = HomeSubRoute.ASSIGNMENTS
+                                    "Exam Schedule" -> subRoute = HomeSubRoute.EXAM_SCHEDULE
+                                    "Student Control" -> subRoute = HomeSubRoute.SECTION_VERIFICATION
+                                    "My Attendance" -> {
+                                        staffHrInitialTab = 1
+                                        subRoute = HomeSubRoute.STAFF_HR
+                                    }
+                                    "Staff Leave" -> {
+                                        staffHrInitialTab = 2
+                                        subRoute = HomeSubRoute.STAFF_HR
+                                    }
+                                    "Class Doubts" -> {
+                                        NavigationBridge.pendingMyClassTab = 0
+                                        onNavigateToTab(1)
+                                    }
+                                    "Upload Notes" -> {
+                                        NavigationBridge.pendingMyClassTab = 1
+                                        onNavigateToTab(1)
+                                    }
+                                    "Holidays" -> subRoute = HomeSubRoute.CALENDAR
+                                    "AI Copilot" -> subRoute = HomeSubRoute.AI_ASSISTANT
                                 }
-                                "Class Doubts" -> {
-                                    NavigationBridge.pendingMyClassTab = 0
-                                    onNavigateToTab(1)
-                                }
-                                "Digital ID" -> subRoute = HomeSubRoute.DIGITAL_ID
-                                "Calendar" -> subRoute = HomeSubRoute.CALENDAR
-                                "Ask AI Tutor" -> onNavigateToTab(2)
                             }
-                        }
-                    )
+                        )
+                    }
+                    else -> {
+                        // STUDENT & PARENT: Pure learning, assessment, and academic tools (no admin leads)
+                        ShortcutTilesGrid(
+                            onShortcutClick = { label ->
+                                when (label) {
+                                    "Homework", "Assignments" -> subRoute = HomeSubRoute.ASSIGNMENTS
+                                    "Timetable", "Exam Schedule" -> subRoute = HomeSubRoute.EXAM_SCHEDULE
+                                    "Attendance" -> subRoute = HomeSubRoute.ATTENDANCE
+                                    "Result", "Report Card" -> subRoute = HomeSubRoute.REPORT_CARD
+                                    "Practice Tests", "Online Exams" -> subRoute = HomeSubRoute.ONLINE_QUIZ
+                                    "Mistakes", "Mistake Analysis" -> subRoute = HomeSubRoute.MISTAKE_ANALYSIS
+                                    "Fee Structure" -> subRoute = HomeSubRoute.FEE_STRUCTURE
+                                    "Study Notes" -> {
+                                        NavigationBridge.pendingMyClassTab = 1
+                                        onNavigateToTab(1)
+                                    }
+                                    "Class Doubts" -> {
+                                        NavigationBridge.pendingMyClassTab = 0
+                                        onNavigateToTab(1)
+                                    }
+                                    "Digital ID" -> subRoute = HomeSubRoute.DIGITAL_ID
+                                    "Calendar" -> subRoute = HomeSubRoute.CALENDAR
+                                    "Ask AI Tutor" -> onNavigateToTab(2)
+                                }
+                            }
+                        )
+                    }
                 }
             }
 
@@ -795,6 +823,26 @@ private data class ShortcutTileData(
 )
 
 @Composable
+private fun AdminShortcutTilesGrid(
+    onShortcutClick: (String) -> Unit
+) {
+    val tiles = listOf(
+        ShortcutTileData("Sibling Leads", Icons.Default.FamilyRestroom, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "Leads"),
+        ShortcutTileData("Student Control", Icons.Default.VerifiedUser, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
+        ShortcutTileData("Staff HR", Icons.Default.Badge, Color(0xFF7C3AED), Color(0xFFEDE9FE)),
+        ShortcutTileData("Roll Call", Icons.Default.HowToReg, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "<60s"),
+        ShortcutTileData("Auto Marks", Icons.Default.AutoAwesome, Color(0xFF7C3AED), Color(0xFFEDE9FE), badgeText = "Auto"),
+        ShortcutTileData("Assignments", Icons.Default.Assignment, Color(0xFFC27838), Color(0xFFFFF7ED)),
+        ShortcutTileData("Exam Schedule", Icons.Default.CalendarMonth, Color(0xFF0284C7), Color(0xFFE0F2FE)),
+        ShortcutTileData("Fee Structure", Icons.Default.CurrencyRupee, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
+        ShortcutTileData("Digital ID", Icons.Default.Badge, Color(0xFF0284C7), Color(0xFFE0F2FE)),
+        ShortcutTileData("Calendar", Icons.Default.EventNote, Color(0xFFD97706), Color(0xFFFEF3C7)),
+        ShortcutTileData("AI Copilot", Icons.Default.Bolt, Color(0xFF10A37F), Color(0xFFECFDF5))
+    )
+    ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
+}
+
+@Composable
 private fun TeacherShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
@@ -809,7 +857,6 @@ private fun TeacherShortcutTilesGrid(
         ShortcutTileData("Class Doubts", Icons.Default.Forum, Color(0xFF0284C7), Color(0xFFE0F2FE)),
         ShortcutTileData("Upload Notes", Icons.Default.PictureAsPdf, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "PDF"),
         ShortcutTileData("Holidays", Icons.Default.EventNote, Color(0xFF16A34A), Color(0xFFDCFCE7)),
-        ShortcutTileData("Sibling Leads", Icons.Default.FamilyRestroom, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "Leads"),
         ShortcutTileData("AI Copilot", Icons.Default.Bolt, Color(0xFF10A37F), Color(0xFFECFDF5))
     )
     ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
@@ -826,7 +873,6 @@ private fun ShortcutTilesGrid(
         ShortcutTileData("Result", Icons.Default.EmojiEvents, Color(0xFF7C3AED), Color(0xFFEDE9FE), badgeText = "91%"),
         ShortcutTileData("Practice Tests", Icons.Default.Quiz, Color(0xFFEA580C), Color(0xFFFFEDD5)),
         ShortcutTileData("Mistakes", Icons.Default.FindInPage, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "AI"),
-        ShortcutTileData("Sibling Leads", Icons.Default.FamilyRestroom, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "New"),
         ShortcutTileData("Fee Structure", Icons.Default.CurrencyRupee, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
         ShortcutTileData("Study Notes", Icons.Default.PictureAsPdf, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "PDF"),
         ShortcutTileData("Class Doubts", Icons.Default.Forum, Color(0xFF0D9488), Color(0xFFCCFBF1)),
@@ -3752,7 +3798,8 @@ private fun HowItWorksStep(number: Int, text: String) {
 
 private enum class FormsSubRoute {
     SERVICES, FEES, TRANSPORT, PROFILE, COMPLAINT, ADMIN_REVIEW, PROUD_PARENT_QR, STAFF_HR,
-    MARKS_AUTOMATION, STUDENT_CONTROL, ROLL_CALL, CALENDAR, CLASS_MANAGER, SUBSTITUTION_HUB, AI_ASSISTANT
+    MARKS_AUTOMATION, STUDENT_CONTROL, ROLL_CALL, CALENDAR, CLASS_MANAGER, SUBSTITUTION_HUB, AI_ASSISTANT,
+    ADMIN_SIBLINGS
 }
 
 @Composable
@@ -3821,6 +3868,9 @@ fun FormsScreen(
         }
         FormsSubRoute.CLASS_MANAGER -> {
             AcademicYearAndClassManagementScreen(onBack = { subRoute = FormsSubRoute.SERVICES })
+        }
+        FormsSubRoute.ADMIN_SIBLINGS -> {
+            AdminSiblingsHubScreen(onBack = { subRoute = FormsSubRoute.SERVICES })
         }
         FormsSubRoute.SUBSTITUTION_HUB -> {
             TimetableSubstitutionScreen(onBack = { subRoute = FormsSubRoute.SERVICES })
@@ -3987,6 +4037,12 @@ fun FormsScreen(
                     } else {
                         if (currentRole == AppRole.ADMIN) {
                             item {
+                                ServiceMenuCard(
+                                    title = "Sibling Admissions Leads",
+                                    subtitle = "Track other-school sibling records & admission offers",
+                                    icon = Icons.Default.FamilyRestroom,
+                                    onClick = { subRoute = FormsSubRoute.ADMIN_SIBLINGS }
+                                )
                                 ServiceMenuCard(
                                     title = "Staff & HR Management",
                                     subtitle = "Staff profiles, attendance register & leave approvals",
