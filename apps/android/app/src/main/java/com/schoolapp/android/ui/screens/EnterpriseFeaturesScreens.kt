@@ -3878,292 +3878,237 @@ fun SiblingsCaptureDialog(onDismiss: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val activeStudent by DiscussionRepository.activeStudent.collectAsState()
 
-    var hasSiblingsChoice by remember { mutableStateOf<Boolean?>(null) } // null = undecided, false = no, true = yes
+    // Controls whether the popup shows the initial prompt or the simple 3-field form
+    var isFormOpen by remember { mutableStateOf(false) }
 
-    // Sibling entries list
-    val siblingsList = remember {
-        mutableStateListOf(
-            SiblingEntry(
-                fullName = "",
-                age = 8,
-                currentGrade = "Class 3",
-                schoolType = "OTHER",
-                schoolName = "",
-                reasonOtherSchool = "Interested in shifting for 2026-27"
-            )
-        )
-    }
+    // Simple 3-field state: Sibling Name, Class, School
+    var siblingName by remember { mutableStateOf("") }
+    var siblingClass by remember { mutableStateOf("") }
+    var siblingSchool by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = {
+        // Only allow dismissing via popup initial screen or cancel button;
+        // inside the form, user completes submission or uses "No siblings" option
+        if (!isFormOpen) onDismiss()
+    }) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(22.dp),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                // Top Row: Timer Badge & Close (X) Button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        color = Color(0xFFFEF3C7),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, Color(0xFFFDE68A))
+            Column(modifier = Modifier.padding(22.dp)) {
+                if (!isFormOpen) {
+                    // ----------------------------------------------------
+                    // POPUP REMINDER: Clean, minimal with Open Form Button
+                    // ----------------------------------------------------
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A))
                         ) {
-                            Text("⏱️ Just 2 min to fill the form!", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Cancel popup",
-                            tint = GenesisColors.TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "Family & Sibling Information",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GenesisColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Help us sync family records to unlock priority admissions and exclusive Sibling Fee Concessions for your family.",
-                    fontSize = 12.sp,
-                    color = GenesisColors.TextSecondary,
-                    lineHeight = 16.sp
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Pre-filled Primary Student Info
-                Surface(
-                    color = Color(0xFFF8FAFC),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "Enrolled Student: ${activeStudent.fullName} (${activeStudent.classTitle})",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = GenesisColors.TextPrimary
-                        )
-                        Text(
-                            text = "Parent Phone: ${activeStudent.parentPhone.ifBlank { "+91 98765 43210" }}",
-                            fontSize = 11.sp,
-                            color = GenesisColors.TextSecondary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Question: Does this student have siblings?
-                Text(
-                    text = "Does ${activeStudent.firstName.ifBlank { "this student" }} have any brothers or sisters?",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GenesisColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            hasSiblingsChoice = false
-                            // Single child: submit and finish permanently!
-                            val submission = SiblingSubmission(
-                                studentId = activeStudent.id,
-                                studentName = activeStudent.fullName,
-                                className = activeStudent.classTitle,
-                                parentName = "Parent of ${activeStudent.fullName}",
-                                parentPhone = activeStudent.parentPhone.ifBlank { "+91 98765 43210" },
-                                parentEmail = activeStudent.parentEmail,
-                                hasSiblings = false,
-                                siblings = emptyList()
-                            )
-                            DiscussionRepository.submitSiblingsForm(context, submission, coroutineScope)
-                            Toast.makeText(context, "Family profile updated! Thank you.", Toast.LENGTH_SHORT).show()
-                            onDismiss()
-                        },
-                        modifier = Modifier.weight(1f).height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (hasSiblingsChoice == false) Color(0xFFEFF6FF) else Color.Transparent
-                        )
-                    ) {
-                        Text("No, Single Child", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-
-                    Button(
-                        onClick = { hasSiblingsChoice = true },
-                        modifier = Modifier.weight(1f).height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (hasSiblingsChoice == true) GenesisColors.Primary else Color(0xFF1E293B)
-                        )
-                    ) {
-                        Text("Yes, Has Siblings", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-
-                // If Yes: Dynamic Sibling Form
-                if (hasSiblingsChoice == true) {
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    siblingsList.forEachIndexed { index, sibling ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Sibling #${index + 1}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Primary)
-                                    if (siblingsList.size > 1) {
-                                        IconButton(
-                                            onClick = { siblingsList.removeAt(index) },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-                                OutlinedTextField(
-                                    value = sibling.fullName,
-                                    onValueChange = { siblingsList[index] = sibling.copy(fullName = it) },
-                                    label = { Text("Sibling Full Name") },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedTextField(
-                                        value = sibling.age.toString(),
-                                        onValueChange = {
-                                            val parsed = it.toIntOrNull() ?: 1
-                                            siblingsList[index] = sibling.copy(age = parsed)
-                                        },
-                                        label = { Text("Age") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    OutlinedTextField(
-                                        value = sibling.currentGrade,
-                                        onValueChange = { siblingsList[index] = sibling.copy(currentGrade = it) },
-                                        label = { Text("Grade (e.g. Class 3)") },
-                                        modifier = Modifier.weight(1.5f)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Where is this sibling currently studying?", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextSecondary)
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    val isOther = sibling.schoolType == "OTHER"
-                                    FilterChip(
-                                        selected = isOther,
-                                        onClick = { siblingsList[index] = sibling.copy(schoolType = "OTHER") },
-                                        label = { Text("In Another School", fontSize = 11.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFFDCFCE7),
-                                            selectedLabelColor = Color(0xFF166534)
-                                        ),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    val isGenesis = sibling.schoolType == "GENESIS"
-                                    FilterChip(
-                                        selected = isGenesis,
-                                        onClick = { siblingsList[index] = sibling.copy(schoolType = "GENESIS", schoolName = "Genesis School Beeramguda") },
-                                        label = { Text("In Genesis School", fontSize = 11.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFFEDE9FE),
-                                            selectedLabelColor = Color(0xFF6D28D9)
-                                        ),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-
-                                if (sibling.schoolType == "OTHER") {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    OutlinedTextField(
-                                        value = sibling.schoolName,
-                                        onValueChange = { siblingsList[index] = sibling.copy(schoolName = it) },
-                                        label = { Text("Current School Name (e.g. DPS, EuroKids)") },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    OutlinedTextField(
-                                        value = sibling.reasonOtherSchool,
-                                        onValueChange = { siblingsList[index] = sibling.copy(reasonOtherSchool = it) },
-                                        label = { Text("Shifting Interest / Target Admission Year") },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⏱️ Just 2 min to fill the form!", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
                             }
                         }
+
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Cancel popup",
+                                tint = GenesisColors.TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = {
-                            siblingsList.add(
-                                SiblingEntry(
-                                    fullName = "",
-                                    age = 6,
-                                    currentGrade = "Class 1",
-                                    schoolType = "OTHER",
-                                    schoolName = "",
-                                    reasonOtherSchool = "Interested in shifting for 2026-27"
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Visual Icon
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .background(Color(0xFFEFF6FF), CircleShape)
+                            .border(1.dp, Color(0xFFBFDBFE), CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("+ Add Another Sibling", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Icon(
+                            Icons.Default.FamilyRestroom,
+                            contentDescription = "Family & Siblings",
+                            tint = GenesisColors.Primary,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Family & Sibling Information",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.TextPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Help us sync family records to unlock priority admissions and exclusive Sibling Fee Concessions for your family.",
+                        fontSize = 12.sp,
+                        color = GenesisColors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Only button to open the form!
+                    Button(
+                        onClick = { isFormOpen = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                    ) {
+                        Icon(Icons.Default.Assignment, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Sibling Form", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else {
+                    // ----------------------------------------------------
+                    // SIMPLE 3-FIELD SIBLINGS FORM: Name, Class, School
+                    // ----------------------------------------------------
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Sibling Details",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextPrimary
+                            )
+                            Text(
+                                text = "Please enter 3 simple details below",
+                                fontSize = 11.sp,
+                                color = GenesisColors.TextSecondary
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close Form",
+                                tint = GenesisColors.TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Field 1: Sibling's Name
+                    OutlinedTextField(
+                        value = siblingName,
+                        onValueChange = { siblingName = it },
+                        label = { Text("Sibling's Name *", fontSize = 12.sp) },
+                        placeholder = { Text("e.g. Rahul Sharma", fontSize = 12.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(20.dp))
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Field 2: Class
+                    OutlinedTextField(
+                        value = siblingClass,
+                        onValueChange = { siblingClass = it },
+                        label = { Text("Class / Grade *", fontSize = 12.sp) },
+                        placeholder = { Text("e.g. Class 3, UKG, 7th", fontSize = 12.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.School, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(20.dp))
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Field 3: School
+                    OutlinedTextField(
+                        value = siblingSchool,
+                        onValueChange = { siblingSchool = it },
+                        label = { Text("School Name *", fontSize = 12.sp) },
+                        placeholder = { Text("e.g. Genesis School, DPS, etc.", fontSize = 12.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Apartment, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(20.dp))
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Primary Submit Button
                     Button(
                         onClick = {
-                            val validSiblings = siblingsList.filter { it.fullName.isNotBlank() }
-                            if (validSiblings.isEmpty()) {
-                                Toast.makeText(context, "Please enter sibling name", Toast.LENGTH_SHORT).show()
+                            val trimmedName = siblingName.trim()
+                            val trimmedClass = siblingClass.trim()
+                            val trimmedSchool = siblingSchool.trim()
+
+                            if (trimmedName.isBlank()) {
+                                Toast.makeText(context, "Please enter sibling's name", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
+                            if (trimmedClass.isBlank()) {
+                                Toast.makeText(context, "Please enter sibling's class/grade", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            if (trimmedSchool.isBlank()) {
+                                Toast.makeText(context, "Please enter sibling's school name", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+
+                            val isGenesis = trimmedSchool.contains("genesis", ignoreCase = true)
+                            val entry = SiblingEntry(
+                                fullName = trimmedName,
+                                age = 0,
+                                currentGrade = trimmedClass,
+                                schoolType = if (isGenesis) "GENESIS" else "OTHER",
+                                schoolName = trimmedSchool,
+                                reasonOtherSchool = "Submitted via Sibling Portal",
+                                targetAdmissionYear = "2026-2027",
+                                admissionStatus = "NEW_LEAD"
+                            )
                             val submission = SiblingSubmission(
                                 studentId = activeStudent.id,
                                 studentName = activeStudent.fullName,
@@ -4172,19 +4117,56 @@ fun SiblingsCaptureDialog(onDismiss: () -> Unit) {
                                 parentPhone = activeStudent.parentPhone.ifBlank { "+91 98765 43210" },
                                 parentEmail = activeStudent.parentEmail,
                                 hasSiblings = true,
-                                siblings = validSiblings
+                                siblings = listOf(entry)
                             )
                             DiscussionRepository.submitSiblingsForm(context, submission, coroutineScope)
-                            Toast.makeText(context, "Sibling details saved! Thank you.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Sibling details submitted successfully! Thank you.", Toast.LENGTH_SHORT).show()
                             onDismiss()
                         },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Submit Sibling Details (1-Tap)", fontWeight = FontWeight.Bold, color = Color.White)
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Submit Sibling Details", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Small option below form: "No siblings"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val submission = SiblingSubmission(
+                                    studentId = activeStudent.id,
+                                    studentName = activeStudent.fullName,
+                                    className = activeStudent.classTitle,
+                                    parentName = "Parent of ${activeStudent.fullName}",
+                                    parentPhone = activeStudent.parentPhone.ifBlank { "+91 98765 43210" },
+                                    parentEmail = activeStudent.parentEmail,
+                                    hasSiblings = false,
+                                    siblings = emptyList()
+                                )
+                                DiscussionRepository.submitSiblingsForm(context, submission, coroutineScope)
+                                Toast.makeText(context, "Recorded: No siblings. Thank you!", Toast.LENGTH_SHORT).show()
+                                onDismiss()
+                            }
+                        ) {
+                            Text(
+                                text = "No siblings? Click here to submit",
+                                fontSize = 12.sp,
+                                color = GenesisColors.TextSecondary,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
