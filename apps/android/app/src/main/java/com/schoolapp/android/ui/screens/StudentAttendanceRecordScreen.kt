@@ -119,7 +119,7 @@ fun StudentAttendanceRecordScreen(
             AttendanceStatCard(
                 count = "8",
                 label = "Absent",
-                valueColor = Color(0xFFF97316),
+                valueColor = Color(0xFFE25C38),
                 icon = Icons.Default.NotificationsOff,
                 modifier = Modifier.weight(1f)
             )
@@ -211,7 +211,7 @@ fun AttendanceHeader(
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 2: AttendanceSummaryCard (Native Gradient, Typography & Asset)
+// COMPONENT 2: AttendanceSummaryCard (Native UI, Exact Figma Colors & Sizes)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceSummaryCard(
@@ -224,50 +224,44 @@ fun AttendanceSummaryCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(156.dp),
+            .height(134.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = BorderStroke(1.dp, Color(0xFFEAB308).copy(alpha = 0.35f))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF3E2B00)),
+        border = BorderStroke(1.dp, Color(0xFF523903))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF3F2B00), // Deep warm amber
-                            Color(0xFF251A04), // Dark transitional gold
-                            Color(0xFF140F03)  // Charcoal gold
-                        )
-                    )
-                )
+                .background(Color(0xFF3E2B00))
         ) {
-            // Student Reading Illustration (Figma Node 3:253)
+            // Student Reading Illustration with Sparkles, Dots & Arrow (Figma Node 3:246/3:253)
             Image(
                 painter = painterResource(id = R.drawable.img_attendance_student),
                 contentDescription = "Student Learning",
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.FillHeight,
+                alignment = Alignment.CenterEnd,
                 modifier = Modifier
                     .fillMaxHeight()
                     .align(Alignment.CenterEnd)
             )
 
-            // Content Column
+            // Content Column (Left: 94.0%, Overall Attendance, Regular)
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 20.dp, top = 20.dp, bottom = 20.dp, end = 120.dp),
+                    .fillMaxHeight()
+                    .align(Alignment.CenterStart)
+                    .padding(start = 22.dp),
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = percentage,
                     fontSize = 44.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFACC15),
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF3C439),
                     letterSpacing = (-0.5).sp
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically
@@ -275,22 +269,22 @@ fun AttendanceSummaryCard(
                     Text(
                         text = label,
                         fontSize = 14.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Medium
+                        color = Color(0xFFC7B69E),
+                        fontWeight = FontWeight.Normal
                     )
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
-                        color = Color(0xFF262626),
+                        color = Color(0xFF221D17),
                         shape = RoundedCornerShape(999.dp)
                     ) {
                         Text(
                             text = status,
-                            color = Color(0xFFD4D4D4),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            color = Color(0xFF9E968D),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                 }
