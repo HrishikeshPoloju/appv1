@@ -2890,39 +2890,460 @@ fun PracticeTestsScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header Hero Banner
+            // 1. REVERSE/REACHED MILESTONES & STREAKS (Inspired by Reference Image 1)
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     border = BorderStroke(1.dp, GenesisColors.Border),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(Color(0xFFEDE9FE), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Quiz, contentDescription = null, tint = GenesisColors.ClassroomPurple, modifier = Modifier.size(26.dp))
-                        }
+                        ArchedMilestoneIllustration(
+                            modifier = Modifier.size(72.dp),
+                            accentColor = Color(0xFFF59E0B)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Instant CBSE Practice Quizzes", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = GenesisColors.TextPrimary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text("Generate concise 5-question tests with clear step-by-step answers & real-world examples via ChatGPT.", fontSize = 12.sp, color = GenesisColors.TextSecondary, lineHeight = 16.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Reached Milestones",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = GenesisColors.TextPrimary
+                                )
+                                Surface(
+                                    color = Color(0xFFFEF3C7),
+                                    shape = RoundedCornerShape(999.dp)
+                                ) {
+                                    Text(
+                                        text = "Evolver 96%",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFB45309),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { 0.96f },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = Color(0xFFF59E0B),
+                                trackColor = Color(0xFFFEF3C7)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("📚 12 Tests Finished", fontSize = 11.sp, color = GenesisColors.TextSecondary)
+                                Text("⏱️ 1h 26m Streak", fontSize = 11.sp, color = GenesisColors.TextSecondary)
+                            }
                         }
                     }
                 }
             }
 
-            // Step 1: Select Class & Subject
+            // 2. DISCOVERY SUBJECT COUNT PILLS (Inspired by Reference Image 3)
+            item {
+                Column {
+                    Text(
+                        text = "Let's Discover Cool Practice Tests!",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = GenesisColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val subjectCounts = listOf(
+                        "Chemistry" to 21,
+                        "Biology" to 13,
+                        "Physics" to 12,
+                        "Mathematics" to 18,
+                        "Social Science" to 10,
+                        "English" to 14
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        subjectCounts.forEach { (subj, count) ->
+                            val isSelected = selectedSubject == subj
+                            Surface(
+                                color = if (isSelected) Color(0xFFFACC15) else Color.White,
+                                shape = RoundedCornerShape(999.dp),
+                                border = BorderStroke(1.dp, if (isSelected) Color(0xFFEAB308) else Color(0xFFE2E8F0)),
+                                modifier = Modifier.clickable { selectedSubject = subj }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = subj,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = if (isSelected) Color(0xFF0F172A) else Color(0xFF475569)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = if (isSelected) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                                        shape = CircleShape
+                                    ) {
+                                        Text(
+                                            text = count.toString(),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) Color(0xFFFACC15) else Color(0xFF64748B),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. SCIENTIFIC WONDERS HERO DISCOVERY CARD (Inspired by Reference Image 3)
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF08A)),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.5.dp, Color(0xFFFDE047)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Scientific Wonders",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF0F172A)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Curated $selectedSubject practice by CBSE Faculty",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF475569)
+                                )
+                            }
+                            ScientistDiscoveryIllustration(modifier = Modifier.size(90.dp, 75.dp))
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("⏱️ 15 Mins", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                Text("📚 5 Questions", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                            }
+
+                            // "Let's Soar" Button with Play Icon (Image 3 Style)
+                            Surface(
+                                color = Color(0xFF0F172A),
+                                shape = RoundedCornerShape(999.dp),
+                                modifier = Modifier.clickable {
+                                    generateTestWithChatGPT("$selectedSubject Core Concepts & High-Yield Problems")
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Let's Soar",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Start Test",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. GRID OF PASTEL SCENARIO CARDS WITH VECTOR LINE ART (Inspired by Reference Image 2)
+            item {
+                Column {
+                    Text(
+                        text = "Interactive Practice Scenarios",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Tap any scenario to generate targeted CBSE practice questions",
+                        fontSize = 12.sp,
+                        color = GenesisColors.TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Row 1: Warm Peach & Mint Green Cards
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Card 1: Warm Peach (Algebra / Conversations)
+                        Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedSubject = "Mathematics"
+                                    generateTestWithChatGPT("Algebra, Polynomials & Quadratic Equations")
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Surface(
+                                    color = Color(0xFFFDE68A),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "5 Scenarios",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF92400E),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Everyday Algebra",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { 0.65f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFFD97706),
+                                    trackColor = Color(0xFFFDE68A)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    StudentDiscussionIllustration(modifier = Modifier.size(80.dp, 60.dp))
+                                }
+                            }
+                        }
+
+                        // Card 2: Mint Green (Science & Workplace Basics)
+                        Surface(
+                            color = Color(0xFFD1FAE5),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedSubject = "Chemistry"
+                                    generateTestWithChatGPT("Chemical Reactions, Acids & Bases")
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Surface(
+                                    color = Color(0xFFA7F3D0),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "6 Scenarios",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF065F46),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Lab & Equations",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { 0.80f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFF059669),
+                                    trackColor = Color(0xFFA7F3D0)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    StudentWhiteboardIllustration(modifier = Modifier.size(80.dp, 60.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Row 2: Periwinkle Blue & Pastel Pink Cards (Elevated)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Card 3: Periwinkle Blue (Physics / Motion)
+                        Surface(
+                            color = Color(0xFFDBEAFE),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                            shadowElevation = 1.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedSubject = "Physics"
+                                    generateTestWithChatGPT("Light, Optics & Laws of Motion")
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Surface(
+                                    color = Color(0xFFBFDBFE),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "7 Scenarios",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E40AF),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Optics & Force",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { 0.40f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFF2563EB),
+                                    trackColor = Color(0xFFBFDBFE)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    StudentCelebrationIllustration(modifier = Modifier.size(80.dp, 60.dp))
+                                }
+                            }
+                        }
+
+                        // Card 4: Pastel Pink (Elevated Card from Image 2)
+                        Surface(
+                            color = Color(0xFFFCE7F3),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFBCFE8)),
+                            shadowElevation = 4.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    selectedSubject = "Mathematics"
+                                    generateTestWithChatGPT("Triangles, Trigonometry & Geometry")
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Surface(
+                                    color = Color(0xFFFBCFE8),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "6 Scenarios",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF9D174D),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Geometry Proofs",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { 0.90f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFFDB2777),
+                                    trackColor = Color(0xFFFBCFE8)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    StudentReadingDeskIllustration(modifier = Modifier.size(80.dp, 60.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. CUSTOM TEST CREATOR (Target Class, Custom Topic & Photo Sheet)
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -2936,7 +3357,7 @@ fun PracticeTestsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("1. Target Class:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                            Text("Create Custom Test:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
                             Box {
                                 Surface(
                                     color = Color(0xFFF1F5F9),
@@ -2971,50 +3392,14 @@ fun PracticeTestsScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Select Subject:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextSecondary)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            subjects.forEach { subj ->
-                                val sel = selectedSubject == subj
-                                FilterChip(
-                                    selected = sel,
-                                    onClick = { selectedSubject = subj },
-                                    label = { Text(subj, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = GenesisColors.Primary,
-                                        selectedLabelColor = Color.White,
-                                        containerColor = Color(0xFFF8FAFC),
-                                        labelColor = GenesisColors.TextSecondary
-                                    ),
-                                    shape = RoundedCornerShape(20.dp),
-                                    border = BorderStroke(1.dp, if (sel) GenesisColors.Primary else GenesisColors.Border)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Step 2: Input Topic or Photo
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("2. Enter Topic / Photo:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                            Text("Topic or Textbook Question:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextSecondary)
                             VoiceCaptureChipButton(
                                 label = "Voice",
                                 promptHint = "Speak practice topic or chapter...",
@@ -3023,12 +3408,12 @@ fun PracticeTestsScreen(
                                 }
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         OutlinedTextField(
                             value = inputTopic,
                             onValueChange = { inputTopic = it },
-                            placeholder = { Text("e.g. Quadratic Equations word problems, Lens formula, Periodic trends...") },
+                            placeholder = { Text("e.g. Quadratic Equations word problems, Lens formula...") },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2
                         )
@@ -3112,63 +3497,7 @@ fun PracticeTestsScreen(
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Generate Practice Test in ChatGPT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                        }
-                    }
-                }
-            }
-
-            // Popular Preset Quizzes
-            item {
-                Text(
-                    text = "Popular CBSE Practice Tests (1-Tap Attempt)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = GenesisColors.TextPrimary
-                )
-            }
-
-            val presetQuizzes = listOf(
-                Triple("Mathematics", "Ch 4: Quadratic Equations", "5 high-yield MCQs & word problems on nature of roots & formula method"),
-                Triple("Physics", "Ch 10: Light & Ray Optics", "5 practice questions on lens formula, magnification & ray diagrams"),
-                Triple("Chemistry", "Ch 1: Chemical Reactions & Equations", "5 questions on balancing, redox reactions & precipitation tests"),
-                Triple("Biology", "Ch 6: Life Processes — Circulation", "5 high-yield problems on heart anatomy, blood vessels & xylem/phloem")
-            )
-
-            items(presetQuizzes) { (subj, title, desc) ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Surface(
-                                color = Color(0xFFEFF6FF),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(subj, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Primary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
-                            Text(desc, fontSize = 12.sp, color = GenesisColors.TextSecondary, lineHeight = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                selectedSubject = subj
-                                generateTestWithChatGPT(title)
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
-                        ) {
-                            Text("Attempt", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Generate Custom Practice Test", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                         }
                     }
                 }

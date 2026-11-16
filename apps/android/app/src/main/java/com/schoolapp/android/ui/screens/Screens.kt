@@ -2423,80 +2423,172 @@ private fun PdfNoteItemCard(
     note: ClassNote,
     onDownload: () -> Unit
 ) {
+    val context = LocalContext.current
     val isDummySample = note.title.contains("Sample_Dummy", ignoreCase = true)
+    var isListening by remember { mutableStateOf(false) }
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (isDummySample) Color(0xFFF0F9FF) else Color.White
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, if (isDummySample) GenesisColors.Primary else GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .clickable { onDownload() }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .background(Color(0xFFFEE2E2), RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = GenesisColors.Emergency, modifier = Modifier.size(20.dp))
-                    Text("PDF", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Emergency)
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                if (isDummySample) {
-                    Surface(
-                        color = GenesisColors.Primary,
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text(
-                            text = "TEST PDF DOWNLOAD",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                        )
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(Color(0xFFFEE2E2), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = GenesisColors.Emergency, modifier = Modifier.size(20.dp))
+                        Text("PDF", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Emergency)
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
-                Text(note.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(note.chapter, fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                Text("By ${note.teacherName} • ${note.date}", fontSize = 11.sp, color = GenesisColors.TextSecondary)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (isDummySample) {
+                        Surface(
+                            color = GenesisColors.Primary,
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Text(
+                                text = "TEST PDF DOWNLOAD",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Text(note.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(note.chapter, fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                    Text("By ${note.teacherName} • ${note.date}", fontSize = 11.sp, color = GenesisColors.TextSecondary)
+                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = onDownload,
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (note.isDownloaded) GenesisColors.Success else GenesisColors.Primary
-                ),
-                modifier = Modifier.height(36.dp)
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Metadata Chips (Inspired by Image 1 Book Reader Screen)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (note.isDownloaded) Icons.Default.CheckCircle else Icons.Default.Download,
-                    contentDescription = "Download PDF",
-                    tint = Color.White,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (note.isDownloaded) "Open PDF" else "PDF",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Surface(
+                    color = Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = "📄 ${note.pageCount} Pages",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF475569),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Surface(
+                    color = Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = "⏱️ ~${(note.pageCount * 2).coerceAtLeast(10)} Mins",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF475569),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Surface(
+                    color = Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = "🌐 English",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF475569),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action Buttons Row: [READ] and [LISTEN] (Image 1 Style)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onDownload,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (note.isDownloaded) GenesisColors.Success else GenesisColors.Primary
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) {
+                    Icon(
+                        imageVector = if (note.isDownloaded) Icons.Default.CheckCircle else Icons.Default.MenuBook,
+                        contentDescription = "Read",
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (note.isDownloaded) "Open PDF" else "READ NOTES",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        isListening = !isListening
+                        Toast.makeText(
+                            context,
+                            if (isListening) "Playing audio summary for ${note.title}..." else "Audio summary stopped",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, if (isListening) GenesisColors.Success else Color(0xFFCBD5E1)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isListening) Color(0xFFECFDF5) else Color.White
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.GraphicEq else Icons.Default.Headphones,
+                        contentDescription = "Listen",
+                        tint = if (isListening) GenesisColors.Success else GenesisColors.TextPrimary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isListening) "LISTENING" else "LISTEN",
+                        color = if (isListening) GenesisColors.Success else GenesisColors.TextPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
