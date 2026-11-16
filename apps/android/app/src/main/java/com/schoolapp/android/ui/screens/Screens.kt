@@ -480,39 +480,6 @@ fun HomeScreen(
                             onAddStudentClick = { subRoute = HomeSubRoute.ADD_STUDENT }
                         )
                     }
-                } else if (currentRole == AppRole.STUDENT) {
-                    item {
-                        Surface(
-                            color = Color(0xFFDCFCE7),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .clickable { showChangeClassDialog = true }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "🔒 Verified Classroom: ${activeStudent.fullName} (${activeStudent.classTitle})",
-                                    color = GenesisColors.Success,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "Details",
-                                    color = GenesisColors.Primary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
                 } else if (currentRole == AppRole.ADMIN) {
                     item {
                         Surface(

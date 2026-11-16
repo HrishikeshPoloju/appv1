@@ -146,17 +146,19 @@ fun ActiveProfileBanner(
     onClick: () -> Unit = {}
 ) {
     Surface(
-        color = GenesisColors.Navy,
-        shape = RoundedCornerShape(14.dp),
+        color = Color.White,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, GenesisColors.Border),
+        shadowElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
@@ -164,47 +166,77 @@ fun ActiveProfileBanner(
                 contentDescription = student.fullName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .border(2.dp, Color.White, CircleShape)
+                    .border(1.5.dp, GenesisColors.Primary.copy(alpha = 0.4f), CircleShape)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${student.fullName}  (${student.studentCode})",
-                    color = Color.White,
+                    text = student.fullName,
+                    color = GenesisColors.MeteorBlack,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = student.bannerClassText,
-                    color = Color(0xFFCBD5E1),
-                    fontSize = 12.sp
+                    text = "${student.classTitle} • Roll No: ${student.studentCode.ifBlank { student.rollNo }}",
+                    color = GenesisColors.TextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal
                 )
             }
-            Surface(
-                color = if (isTeacherOrAdmin) GenesisColors.ClassroomPurple.copy(alpha = 0.35f) else GenesisColors.Success.copy(alpha = 0.25f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, if (isTeacherOrAdmin) Color(0xFFD8B4FE) else Color(0xFF86EFAC))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (isTeacherOrAdmin) {
+                Surface(
+                    color = Color(0xFFF3E8FF),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD8B4FE))
                 ) {
-                    Icon(
-                        imageVector = if (isTeacherOrAdmin) Icons.Default.Edit else Icons.Default.Lock,
-                        contentDescription = if (isTeacherOrAdmin) "Teacher Edit Student" else "Profile Locked",
-                        tint = if (isTeacherOrAdmin) Color(0xFFD8B4FE) else Color(0xFF86EFAC),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (isTeacherOrAdmin) "Teacher Edit" else "Locked",
-                        color = if (isTeacherOrAdmin) Color(0xFFD8B4FE) else Color(0xFF86EFAC),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Profile",
+                            tint = GenesisColors.ClassroomPurple,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Edit",
+                            color = GenesisColors.ClassroomPurple,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    color = Color(0xFFDCFCE7),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified",
+                            tint = GenesisColors.Success,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Verified",
+                            color = GenesisColors.Success,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -313,44 +345,35 @@ fun PrototypeRoleBar(
     currentRole: AppRole,
     onRoleSelected: (AppRole) -> Unit
 ) {
-    Surface(
-        color = Color(0xFFEFF6FF),
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "PROTOTYPE ROLE:",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = GenesisColors.Primary
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                AppRole.values().forEach { role ->
-                    val selected = role == currentRole
-                    Surface(
-                        color = if (selected) Color(role.badgeColor) else Color.White,
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(1.dp, if (selected) Color(role.badgeColor) else GenesisColors.Border),
-                        modifier = Modifier.clickable { onRoleSelected(role) }
-                    ) {
-                        Text(
-                            text = role.displayName,
-                            color = if (selected) Color.White else GenesisColors.TextSecondary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
+        Text(
+            text = "Switch Role:",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = GenesisColors.TextSecondary
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            AppRole.values().forEach { role ->
+                val selected = role == currentRole
+                Surface(
+                    color = if (selected) Color(role.badgeColor) else Color.White,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, if (selected) Color(role.badgeColor) else GenesisColors.Border),
+                    modifier = Modifier.clickable { onRoleSelected(role) }
+                ) {
+                    Text(
+                        text = role.displayName,
+                        color = if (selected) Color.White else GenesisColors.TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
                 }
             }
         }
