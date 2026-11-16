@@ -35,6 +35,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -962,24 +963,24 @@ private fun ShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
     val items = listOf(
-        HubShortcutItem("Homework", R.drawable.ic_hub_homework),
-        HubShortcutItem("Timetable", R.drawable.ic_hub_timetable),
-        HubShortcutItem("Attendance", R.drawable.ic_hub_attendance),
-        HubShortcutItem("Result", R.drawable.ic_hub_result),
-        HubShortcutItem("Practice Tests", R.drawable.ic_hub_practice_tests),
-        HubShortcutItem("Mistakes", R.drawable.ic_hub_mistakes),
-        HubShortcutItem("Fee Structure", R.drawable.ic_hub_fee_structure),
-        HubShortcutItem("Study Notes", R.drawable.ic_hub_study_notes),
-        HubShortcutItem("Class Doubts", R.drawable.ic_hub_class_doubts),
-        HubShortcutItem("Digital ID", R.drawable.ic_hub_digital_id),
-        HubShortcutItem("Calendar", R.drawable.ic_hub_calendar),
-        HubShortcutItem("Ask AI Tutor", R.drawable.ic_hub_ask_ai)
+        HubShortcutItem("Homework", R.drawable.tile_homework),
+        HubShortcutItem("Timetable", R.drawable.tile_timetable),
+        HubShortcutItem("Attendance", R.drawable.tile_attendance),
+        HubShortcutItem("Result", R.drawable.tile_result),
+        HubShortcutItem("Practice Tests", R.drawable.tile_practice_tests),
+        HubShortcutItem("Mistakes", R.drawable.tile_mistakes),
+        HubShortcutItem("Fee Structure", R.drawable.tile_fee_structure),
+        HubShortcutItem("Study Notes", R.drawable.tile_study_notes),
+        HubShortcutItem("Class Doubts", R.drawable.tile_class_doubts),
+        HubShortcutItem("Digital ID", R.drawable.tile_digital_id),
+        HubShortcutItem("Calendar", R.drawable.tile_calendar),
+        HubShortcutItem("Ask AI Tutor", R.drawable.tile_ask_ai)
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items.chunked(3).forEach { rowItems ->
@@ -988,47 +989,21 @@ private fun ShortcutTilesGrid(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 rowItems.forEach { tile ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (tile.label == "Ask AI Tutor") Color(0xFFFDF2F8) else Color.White
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (tile.label == "Ask AI Tutor") Color(0xFFFBCFE8) else Color.White.copy(alpha = 0.9f)
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.5.dp),
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(104.dp)
+                            .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), clip = false)
+                            .clip(RoundedCornerShape(18.dp))
                             .clickable { onShortcutClick(tile.label) }
                     ) {
-                        Column(
+                        Image(
+                            painter = painterResource(tile.iconRes),
+                            contentDescription = tile.label,
+                            contentScale = ContentScale.FillWidth,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Image(
-                                painter = painterResource(tile.iconRes),
-                                contentDescription = tile.label,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .height(52.dp)
-                                    .fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = tile.label,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E293B),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                                .fillMaxWidth()
+                                .aspectRatio(158f / 114f)
+                        )
                     }
                 }
             }
