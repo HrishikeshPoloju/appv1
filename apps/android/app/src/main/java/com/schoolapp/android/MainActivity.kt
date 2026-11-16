@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.schoolapp.android.data.AppRole
 import com.schoolapp.android.data.DiscussionRepository
+import com.schoolapp.android.ui.screens.AppSplashScreen
 import com.schoolapp.android.ui.screens.DoubtsScreen
 import com.schoolapp.android.ui.screens.FormsScreen
 import com.schoolapp.android.ui.screens.HomeScreen
@@ -64,12 +66,17 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val coroutineScope = rememberCoroutineScope()
                 val isLoggedIn by DiscussionRepository.isStudentLoggedIn.collectAsState()
+                var isAppLoading by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
                     DiscussionRepository.initSession(context, coroutineScope)
                 }
 
-                if (!isLoggedIn) {
+                if (isAppLoading) {
+                    AppSplashScreen(
+                        onLoadingComplete = { isAppLoading = false }
+                    )
+                } else if (!isLoggedIn) {
                     StudentFirstTimeLoginScreen(
                         onLoginConfirmed = { fullName, className, section, parentPhone, parentEmail, address ->
                             DiscussionRepository.completeInitialStudentOnboarding(
