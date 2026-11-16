@@ -46,10 +46,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.schoolapp.android.R
 import com.schoolapp.android.data.*
 import com.schoolapp.android.ui.theme.GenesisColors
 import kotlinx.coroutines.delay
@@ -379,34 +381,50 @@ fun HomeScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .background(
+                    if (currentRole == AppRole.STUDENT) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFE2F1FC),
+                                Color(0xFFEBF3FC),
+                                Color(0xFFEFF6FF),
+                                Color(0xFFF8FAFC)
+                            )
+                        )
+                    } else {
+                        androidx.compose.ui.graphics.SolidColor(GenesisColors.Background)
+                    }
+                ),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
-            // 1. Meteor Black School Header with High-Contrast Branding & Profile Pill
-            item {
-                val headerPillLabel = if (currentRole == AppRole.TEACHER) {
-                    "Staff"
-                } else {
-                    "${activeStudent.className.removePrefix("Class ").trim()}-${activeStudent.section}"
-                }
-                SchoolHeader(
-                    schoolName = "GENESIS SCHOOL BEERAMGUDA",
-                    classSectionLabel = headerPillLabel,
-                    onProfileClick = {
-                        if (currentRole == AppRole.TEACHER) {
-                            staffHrInitialTab = 0
-                            subRoute = HomeSubRoute.STAFF_HR
-                        } else {
-                            showChangeClassDialog = true
-                        }
-                    },
-                    onNotificationClick = {
-                        selectedNotice = notices.firstOrNull()
-                        if (selectedNotice != null) {
-                            subRoute = HomeSubRoute.NOTICE_DETAILS
-                        }
+            // 1. Meteor Black School Header (Shown for Teacher / Admin / Parent; Student matches reference UI)
+            if (currentRole != AppRole.STUDENT) {
+                item {
+                    val headerPillLabel = if (currentRole == AppRole.TEACHER) {
+                        "Staff"
+                    } else {
+                        "${activeStudent.className.removePrefix("Class ").trim()}-${activeStudent.section}"
                     }
-                )
+                    SchoolHeader(
+                        schoolName = "GENESIS SCHOOL BEERAMGUDA",
+                        classSectionLabel = headerPillLabel,
+                        onProfileClick = {
+                            if (currentRole == AppRole.TEACHER) {
+                                staffHrInitialTab = 0
+                                subRoute = HomeSubRoute.STAFF_HR
+                            } else {
+                                showChangeClassDialog = true
+                            }
+                        },
+                        onNotificationClick = {
+                            selectedNotice = notices.firstOrNull()
+                            if (selectedNotice != null) {
+                                subRoute = HomeSubRoute.NOTICE_DETAILS
+                            }
+                        }
+                    )
+                }
             }
 
             // Role View Selector
@@ -456,8 +474,37 @@ fun HomeScreen(
                 )
             }
 
-            if (currentRole != AppRole.TEACHER) {
-                // 2. Dark Active-Student Banner (Shown only for Student / Parent / Admin)
+            if (currentRole == AppRole.STUDENT) {
+                // Student Profile Card matching reference image
+                item {
+                    ActiveProfileBanner(
+                        student = activeStudent,
+                        isTeacherOrAdmin = false,
+                        onClick = { showChangeClassDialog = true }
+                    )
+                }
+
+                // Student Hub Hero Banner matching reference image
+                item {
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.banner_student_hub),
+                            contentDescription = "Student Hub",
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(24.dp))
+                        )
+                    }
+                }
+            } else if (currentRole != AppRole.TEACHER) {
+                // 2. Active-Student Banner (Shown only for Parent / Admin)
                 item {
                     ActiveProfileBanner(
                         student = activeStudent,
@@ -466,7 +513,7 @@ fun HomeScreen(
                     )
                 }
 
-                // 3. Horizontal Linked-Student Profile Selector (Parent mode) or Classroom Lock Strip
+                // 3. Horizontal Linked-Student Profile Selector (Parent mode)
                 if (currentRole == AppRole.PARENT) {
                     item {
                         LinkedStudentSelectorRow(
@@ -515,7 +562,7 @@ fun HomeScreen(
                     }
                 }
 
-                // 4. Auto-Rotating 3-Slide School Hero Carousel (Swipes Every 5 Seconds + Manual Swipe)
+                // 4. Auto-Rotating 3-Slide School Hero Carousel (Parent / Admin mode)
                 item {
                     SchoolHeroCarousel()
                 }
@@ -827,32 +874,10 @@ private fun TeacherShortcutTilesGrid(
 }
 
 @Composable
-private fun ShortcutTilesGrid(
-    onShortcutClick: (String) -> Unit
-) {
-    val tiles = listOf(
-        ShortcutTileData("Homework", Icons.Default.MenuBook, Color(0xFFC27838), Color(0xFFFFF7ED), badgeText = "3 Due"),
-        ShortcutTileData("Timetable", Icons.Default.CalendarMonth, Color(0xFF0284C7), Color(0xFFE0F2FE), badgeText = "Exam"),
-        ShortcutTileData("Attendance", Icons.Default.HowToReg, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "94%"),
-        ShortcutTileData("Result", Icons.Default.EmojiEvents, Color(0xFF7C3AED), Color(0xFFEDE9FE), badgeText = "91%"),
-        ShortcutTileData("Practice Tests", Icons.Default.Quiz, Color(0xFFEA580C), Color(0xFFFFEDD5)),
-        ShortcutTileData("Mistakes", Icons.Default.FindInPage, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "AI"),
-        ShortcutTileData("Fee Structure", Icons.Default.CurrencyRupee, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
-        ShortcutTileData("Study Notes", Icons.Default.PictureAsPdf, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "PDF"),
-        ShortcutTileData("Class Doubts", Icons.Default.Forum, Color(0xFF0D9488), Color(0xFFCCFBF1)),
-        ShortcutTileData("Digital ID", Icons.Default.Badge, Color(0xFF0284C7), Color(0xFFE0F2FE)),
-        ShortcutTileData("Calendar", Icons.Default.EventNote, Color(0xFFD97706), Color(0xFFFEF3C7)),
-        ShortcutTileData("Ask AI Tutor", Icons.Default.AutoAwesome, Color(0xFF10A37F), Color(0xFFECFDF5))
-    )
-    ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
-}
-
-@Composable
 private fun ShortcutTileGridContent(
     tiles: List<ShortcutTileData>,
     onShortcutClick: (String) -> Unit
 ) {
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -919,6 +944,90 @@ private fun ShortcutTileGridContent(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class HubShortcutItem(
+    val label: String,
+    val iconRes: Int
+)
+
+@Composable
+private fun ShortcutTilesGrid(
+    onShortcutClick: (String) -> Unit
+) {
+    val items = listOf(
+        HubShortcutItem("Homework", R.drawable.ic_hub_homework),
+        HubShortcutItem("Timetable", R.drawable.ic_hub_timetable),
+        HubShortcutItem("Attendance", R.drawable.ic_hub_attendance),
+        HubShortcutItem("Result", R.drawable.ic_hub_result),
+        HubShortcutItem("Practice Tests", R.drawable.ic_hub_practice_tests),
+        HubShortcutItem("Mistakes", R.drawable.ic_hub_mistakes),
+        HubShortcutItem("Fee Structure", R.drawable.ic_hub_fee_structure),
+        HubShortcutItem("Study Notes", R.drawable.ic_hub_study_notes),
+        HubShortcutItem("Class Doubts", R.drawable.ic_hub_class_doubts),
+        HubShortcutItem("Digital ID", R.drawable.ic_hub_digital_id),
+        HubShortcutItem("Calendar", R.drawable.ic_hub_calendar),
+        HubShortcutItem("Ask AI Tutor", R.drawable.ic_hub_ask_ai)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items.chunked(3).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowItems.forEach { tile ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (tile.label == "Ask AI Tutor") Color(0xFFFDF2F8) else Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (tile.label == "Ask AI Tutor") Color(0xFFFBCFE8) else Color.White.copy(alpha = 0.9f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.5.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(104.dp)
+                            .clickable { onShortcutClick(tile.label) }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Image(
+                                painter = painterResource(tile.iconRes),
+                                contentDescription = tile.label,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .height(52.dp)
+                                    .fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = tile.label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }

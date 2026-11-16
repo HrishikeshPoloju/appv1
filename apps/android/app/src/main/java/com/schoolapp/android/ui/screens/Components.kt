@@ -1,6 +1,7 @@
 package com.schoolapp.android.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,11 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.schoolapp.android.R
 import com.schoolapp.android.data.AppRole
 import com.schoolapp.android.data.StudentProfile
 import com.schoolapp.android.ui.theme.GenesisColors
@@ -146,13 +149,13 @@ fun ActiveProfileBanner(
     onClick: () -> Unit = {}
 ) {
     Surface(
-        color = Color.White,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, GenesisColors.Border),
-        shadowElevation = 1.dp,
+        color = Color.White.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        shadowElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable { onClick() }
     ) {
         Row(
@@ -161,31 +164,30 @@ fun ActiveProfileBanner(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = student.avatarUrl,
+            Image(
+                painter = painterResource(R.drawable.avatar_student_3d),
                 contentDescription = student.fullName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
-                    .border(1.5.dp, GenesisColors.Primary.copy(alpha = 0.4f), CircleShape)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = student.fullName,
-                    color = GenesisColors.MeteorBlack,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "${student.classTitle} • Roll No: ${student.studentCode.ifBlank { student.rollNo }}",
-                    color = GenesisColors.TextSecondary,
+                    color = Color(0xFF475569),
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal
+                    fontWeight = FontWeight.Medium
                 )
             }
             if (isTeacherOrAdmin) {
@@ -220,19 +222,19 @@ fun ActiveProfileBanner(
                     border = BorderStroke(1.dp, Color(0xFF86EFAC))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Verified,
                             contentDescription = "Verified",
-                            tint = GenesisColors.Success,
-                            modifier = Modifier.size(13.dp)
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Verified",
-                            color = GenesisColors.Success,
+                            color = Color(0xFF16A34A),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -348,31 +350,32 @@ fun PrototypeRoleBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = "Switch Role:",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = GenesisColors.TextSecondary
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1E293B)
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             AppRole.values().forEach { role ->
                 val selected = role == currentRole
                 Surface(
-                    color = if (selected) Color(role.badgeColor) else Color.White,
+                    color = if (selected) Color(0xFF10B981) else Color.White,
                     shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, if (selected) Color(role.badgeColor) else GenesisColors.Border),
+                    border = BorderStroke(1.dp, if (selected) Color(0xFF059669) else Color(0xFFE2E8F0)),
+                    shadowElevation = if (selected) 2.5.dp else 0.dp,
                     modifier = Modifier.clickable { onRoleSelected(role) }
                 ) {
                     Text(
                         text = role.displayName,
-                        color = if (selected) Color.White else GenesisColors.TextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        color = if (selected) Color.White else Color(0xFF475569),
+                        fontSize = 11.5.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
                     )
                 }
             }
