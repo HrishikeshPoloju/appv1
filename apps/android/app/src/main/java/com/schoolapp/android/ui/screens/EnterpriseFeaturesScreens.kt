@@ -75,6 +75,14 @@ fun AttendanceHubScreen(
     val submittedAttendanceMap by DiscussionRepository.submittedClassesAttendance.collectAsState()
     val isStaff = currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN
 
+    if (!isStaff) {
+        StudentAttendanceRecordScreen(
+            student = student,
+            onBack = onBack
+        )
+        return
+    }
+
     var showConfirmDialog by remember { mutableStateOf(false) }
 
     val classRoster = remember(roster, currentClass.id) {
