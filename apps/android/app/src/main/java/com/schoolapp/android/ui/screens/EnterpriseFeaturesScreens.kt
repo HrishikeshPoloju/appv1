@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import com.schoolapp.android.R
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1179,21 +1181,62 @@ fun ExamResultsReportCardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(GenesisColors.Background)
+            .background(Color(0xFF0F1626))
     ) {
-        SubScreenTopBar(title = "Exam Results", onBack = onBack)
+        // Figma Header (Circular Back Pod + Exam Results + Subtitle)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF1E293B))
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column {
+                Text(
+                    text = "Exam Results",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    letterSpacing = 0.3.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${student.fullName} • $targetClassTitle",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.Normal
+                )
+            }
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
-            // Exam Selector Dropdown (Unit Test 1, Unit Test 2, Quarterly, Half-Yearly, Final Annual)
+            // Exam Selector Dropdown (Figma Node 9:74)
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
                     Surface(
-                        color = Color.White,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, GenesisColors.Primary.copy(alpha = 0.35f)),
+                        color = Color(0xFF131B2E),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFF263554)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { examMenuExpanded = true }
@@ -1201,28 +1244,30 @@ fun ExamResultsReportCardScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
                                 Text(
                                     text = "Selected Exam",
-                                    fontSize = 11.sp,
-                                    color = GenesisColors.TextSecondary,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF8E9EB5),
                                     fontWeight = FontWeight.Medium
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = selectedExam,
-                                    fontSize = 16.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = GenesisColors.Primary
+                                    color = Color.White
                                 )
                             }
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Select Exam",
-                                tint = GenesisColors.Primary
+                                tint = Color(0xFF93C5FD),
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -1230,7 +1275,7 @@ fun ExamResultsReportCardScreen(
                     DropdownMenu(
                         expanded = examMenuExpanded,
                         onDismissRequest = { examMenuExpanded = false },
-                        modifier = Modifier.background(Color.White)
+                        modifier = Modifier.background(Color(0xFF1E293B))
                     ) {
                         availableExams.forEach { examTitle ->
                             DropdownMenuItem(
@@ -1238,12 +1283,12 @@ fun ExamResultsReportCardScreen(
                                     Text(
                                         text = examTitle,
                                         fontWeight = if (examTitle == selectedExam) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (examTitle == selectedExam) GenesisColors.Primary else GenesisColors.TextPrimary
+                                        color = if (examTitle == selectedExam) Color(0xFF60A5FA) else Color.White
                                     )
                                 },
                                 trailingIcon = {
                                     if (examTitle == selectedExam) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF60A5FA), modifier = Modifier.size(18.dp))
                                     }
                                 },
                                 onClick = {
@@ -1254,15 +1299,15 @@ fun ExamResultsReportCardScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
             if (!isStaff && !isExamApproved) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
                         shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        border = BorderStroke(1.dp, Color(0xFF263554)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -1274,223 +1319,280 @@ fun ExamResultsReportCardScreen(
                             Box(
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .background(Color(0xFFFEF3C7), CircleShape),
+                                    .background(Color(0xFF332A15), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(28.dp))
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
                                 text = "Results Awaiting Approval",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
-                                color = GenesisColors.TextPrimary
+                                color = Color.White
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "$selectedExam marks are being verified and will appear automatically once approved by your Class Teacher.",
                                 fontSize = 13.sp,
-                                color = GenesisColors.TextSecondary,
+                                color = Color(0xFF94A3B8),
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
             } else {
+                // Hero Performance Card (Figma Node 9:60)
                 item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = GenesisColors.MeteorBlack),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "$selectedExam • $targetClassTitle",
-                                    color = Color(0xFFBFDBFE),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "%.1f%%".format(percentage),
-                                    color = Color.White,
-                                    fontSize = 36.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                                Text(
-                                    text = "Total Marks: $totalObtained / $totalMax",
-                                    color = Color(0xFFDBEAFE),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.EmojiEvents,
-                                contentDescription = null,
-                                tint = Color(0xFFFBBF24),
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    val reportLines = mutableListOf(
-                                        "SUBJECT                          MARKS OBTAINED        PERCENTAGE",
-                                        "-----------------------------------------------------------------"
-                                    )
-                                    results.forEach { r ->
-                                        val paddedSub = r.subject.padEnd(32, ' ')
-                                        val paddedScore = "${r.marksObtained} / ${r.maxMarks}".padEnd(21, ' ')
-                                        val subPct = (r.marksObtained * 100) / r.maxMarks.coerceAtLeast(1)
-                                        reportLines.add("$paddedSub $paddedScore $subPct%")
-                                    }
-                                    reportLines.add("-----------------------------------------------------------------")
-                                    reportLines.add("TOTAL MARKS: $totalObtained / $totalMax      |      PERCENTAGE: ${"%.1f".format(percentage)}%")
-
-                                    val saved = generateAndSaveSchoolPdf(
-                                        context = context,
-                                        fileNameBase = "Genesis_ReportCard_${student.studentCode}",
-                                        documentCategory = "Official Academic Report Card • AY 2026-27",
-                                        documentTitle = "$selectedExam Examination Results",
-                                        subtitleLine = "${student.fullName} (ID: ${student.studentCode})  |  $targetClassTitle",
-                                        metaLines = listOf(
-                                            "Parent Contact: ${student.parentPhone}"
-                                        ),
-                                        bodyLines = reportLines
-                                    )
-                                    if (saved != null) {
-                                        Toast.makeText(context, "Report Card saved to Downloads/${saved.fileName}", Toast.LENGTH_LONG).show()
-                                        openPdfUri(context, saved.openableUri)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2D56)),
+                        shape = RoundedCornerShape(22.dp),
+                        border = BorderStroke(1.dp, Color(0xFF1E4C82)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Download PDF", color = GenesisColors.Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-
-                            Button(
-                                onClick = onOpenProudParentQr,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
-                            ) {
-                                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Share Status", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Subject-Wise Marks",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = GenesisColors.TextPrimary
-                    )
-                    if (isStaff) {
-                        Text(
-                            text = "Tap subject to edit marks",
-                            fontSize = 12.sp,
-                            color = GenesisColors.Primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-
-            items(results, key = { it.subject }) { item ->
-                val subPercent = (item.marksObtained * 100) / item.maxMarks.coerceAtLeast(1)
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable(enabled = isStaff) {
-                            selectedSubjectForEntry = item.subject
-                            marksInput = item.marksObtained.toString()
-                            maxMarksInput = item.maxMarks.toString()
-                            showEnterMarksDialog = true
-                        }
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = item.subject,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = GenesisColors.TextPrimary
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "${item.marksObtained} / ${item.maxMarks}",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = GenesisColors.TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Surface(
-                                    color = Color(0xFFEFF6FF),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Surface(
+                                        color = Color(0xFF163C6F),
+                                        shape = RoundedCornerShape(999.dp)
+                                    ) {
+                                        Text(
+                                            text = selectedExam,
+                                            color = Color(0xFF93C5FD),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = "$subPercent%",
-                                        color = GenesisColors.Primary,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        text = "%.1f%%".format(percentage),
+                                        color = Color.White,
+                                        fontSize = 44.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = (-0.5).sp
                                     )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Total Marks: $totalObtained / $totalMax",
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                // Trophy Illustration
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_exam_trophy),
+                                    contentDescription = "Exam Trophy",
+                                    modifier = Modifier
+                                        .size(86.dp)
+                                        .padding(start = 8.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            // Action Buttons: Download PDF & Share Status (Figma 9:66 & 9:62)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val reportLines = mutableListOf(
+                                            "SUBJECT                          MARKS OBTAINED        PERCENTAGE",
+                                            "-----------------------------------------------------------------"
+                                        )
+                                        results.forEach { r ->
+                                            val paddedSub = r.subject.padEnd(32, ' ')
+                                            val paddedScore = "${r.marksObtained} / ${r.maxMarks}".padEnd(21, ' ')
+                                            val subPct = (r.marksObtained * 100) / r.maxMarks.coerceAtLeast(1)
+                                            reportLines.add("$paddedSub $paddedScore $subPct%")
+                                        }
+                                        reportLines.add("-----------------------------------------------------------------")
+                                        reportLines.add("TOTAL MARKS: $totalObtained / $totalMax      |      PERCENTAGE: ${"%.1f".format(percentage)}%")
+
+                                        val saved = generateAndSaveSchoolPdf(
+                                            context = context,
+                                            fileNameBase = "Genesis_ReportCard_${student.studentCode}",
+                                            documentCategory = "Official Academic Report Card • AY 2026-27",
+                                            documentTitle = "$selectedExam Examination Results",
+                                            subtitleLine = "${student.fullName} (ID: ${student.studentCode})  |  $targetClassTitle",
+                                            metaLines = listOf(
+                                                "Parent Contact: ${student.parentPhone}"
+                                            ),
+                                            bodyLines = reportLines
+                                        )
+                                        if (saved != null) {
+                                            Toast.makeText(context, "Report Card saved to Downloads/${saved.fileName}", Toast.LENGTH_LONG).show()
+                                            openPdfUri(context, saved.openableUri)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(46.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Download PDF", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+
+                                Button(
+                                    onClick = onOpenProudParentQr,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(46.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8))
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Share Status", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        LinearProgressIndicator(
-                            progress = { (item.marksObtained / item.maxMarks.toFloat()).coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(999.dp)),
-                            color = GenesisColors.Primary,
-                            trackColor = Color(0xFFE2E8F0)
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Subject-Wise Marks",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = Color.White
                         )
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Text(
+                                text = if (isStaff) "Tap to Edit" else "${results.size} Subjects",
+                                fontSize = 12.sp,
+                                color = Color(0xFF94A3B8),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                items(results, key = { it.subject }) { item ->
+                    val subPercent = (item.marksObtained * 100) / item.maxMarks.coerceAtLeast(1)
+                    val badgeColor = when {
+                        subPercent >= 90 -> Color(0xFFF59E0B) // Amber
+                        subPercent >= 80 -> Color(0xFF10B981) // Emerald
+                        subPercent >= 70 -> Color(0xFF3B82F6) // Blue
+                        else -> Color(0xFF94A3B8)
+                    }
+                    val iconRes = when {
+                        item.subject.contains("math", ignoreCase = true) -> R.drawable.ic_sub_math
+                        item.subject.contains("physic", ignoreCase = true) -> R.drawable.ic_sub_physics
+                        item.subject.contains("chem", ignoreCase = true) -> R.drawable.ic_sub_chemistry
+                        item.subject.contains("bio", ignoreCase = true) -> R.drawable.ic_sub_biology
+                        item.subject.contains("eng", ignoreCase = true) -> R.drawable.ic_sub_english
+                        item.subject.contains("soc", ignoreCase = true) || item.subject.contains("hist", ignoreCase = true) -> R.drawable.ic_sub_social
+                        item.subject.contains("sci", ignoreCase = true) -> R.drawable.ic_sub_science
+                        else -> R.drawable.ic_sub_math
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFF263554)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                            .clickable(enabled = isStaff) {
+                                selectedSubjectForEntry = item.subject
+                                marksInput = item.marksObtained.toString()
+                                maxMarksInput = item.maxMarks.toString()
+                                showEnterMarksDialog = true
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Subject Icon Box
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFF1E293B)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = iconRes),
+                                        contentDescription = item.subject,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(14.dp))
+
+                                // Subject Name & Score
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.subject,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${item.marksObtained} / ${item.maxMarks}",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
+
+                                // Percentage Pill Badge
+                                Surface(
+                                    color = badgeColor.copy(alpha = 0.18f),
+                                    border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(999.dp)
+                                ) {
+                                    Text(
+                                        text = "$subPercent%",
+                                        color = badgeColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Progress Bar
+                            LinearProgressIndicator(
+                                progress = { (item.marksObtained / item.maxMarks.toFloat()).coerceIn(0f, 1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(999.dp)),
+                                color = badgeColor,
+                                trackColor = Color(0xFF1E293B)
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }
