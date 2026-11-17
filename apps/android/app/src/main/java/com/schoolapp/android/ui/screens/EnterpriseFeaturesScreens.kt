@@ -1499,6 +1499,8 @@ fun ExamResultsReportCardScreen(
                         else -> Color(0xFF94A3B8)
                     }
                     val iconRes = when {
+                        item.subject.contains("telugu", ignoreCase = true) -> R.drawable.ic_sub_telugu
+                        item.subject.contains("hindi", ignoreCase = true) -> R.drawable.ic_sub_hindi
                         item.subject.contains("math", ignoreCase = true) -> R.drawable.ic_sub_math
                         item.subject.contains("physic", ignoreCase = true) -> R.drawable.ic_sub_physics
                         item.subject.contains("chem", ignoreCase = true) -> R.drawable.ic_sub_chemistry

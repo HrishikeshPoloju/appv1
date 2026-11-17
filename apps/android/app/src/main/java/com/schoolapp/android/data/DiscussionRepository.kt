@@ -528,11 +528,13 @@ object DiscussionRepository {
 
     // Class & Section-Wise Customizable Subject Lists (Editable by Teacher/Admin per Class & Section)
     private val initialClassSubjects: Map<String, List<String>> = mapOf(
-        "class-10a" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "English", "Social Studies", "Computer Science"),
-        "class-10b" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "English", "Social Studies"),
-        "class-9a" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "English", "Social Studies", "Hindi"),
-        "class-9b" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "English", "Social Studies"),
-        "class-8a" to listOf("Mathematics", "Science", "English", "Social Studies", "Hindi", "Computer Science"),
+        "class-10a" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies", "Computer Science"),
+        "class-10b" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies"),
+        "class-10c" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies"),
+        "class-10d" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies"),
+        "class-9a" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies"),
+        "class-9b" to listOf("Mathematics", "Physics", "Chemistry", "Biology", "Telugu", "Hindi", "English", "Social Studies"),
+        "class-8a" to listOf("Mathematics", "Science", "English", "Social Studies", "Hindi", "Telugu", "Computer Science"),
         "class-5a" to listOf("Mathematics", "English", "Science", "Social Studies", "Hindi", "Telugu"),
         "class-5f" to listOf("Mathematics", "English", "Science", "Social Studies", "Hindi", "Telugu")
     )
@@ -545,6 +547,8 @@ object DiscussionRepository {
             "Physics",
             "Chemistry",
             "Biology",
+            "Telugu",
+            "Hindi",
             "English",
             "Social Studies"
         )
@@ -1211,7 +1215,9 @@ object DiscussionRepository {
             SubjectExamResult("Physics", "Unit Test 1", 23, 25, "", ""),
             SubjectExamResult("Chemistry", "Unit Test 1", 21, 25, "", ""),
             SubjectExamResult("Biology", "Unit Test 1", 24, 25, "", ""),
-            SubjectExamResult("English", "Unit Test 1", 22, 25, "", ""),
+            SubjectExamResult("Telugu", "Unit Test 1", 23, 25, "", ""),
+            SubjectExamResult("Hindi", "Unit Test 1", 22, 25, "", ""),
+            SubjectExamResult("English", "Unit Test 1", 24, 25, "", ""),
             SubjectExamResult("Social Studies", "Unit Test 1", 22, 25, "", ""),
             SubjectExamResult("Computer Science", "Unit Test 1", 25, 25, "", "")
         ),
@@ -1220,6 +1226,8 @@ object DiscussionRepository {
             SubjectExamResult("Physics", "Unit Test 2", 22, 25, "", ""),
             SubjectExamResult("Chemistry", "Unit Test 2", 23, 25, "", ""),
             SubjectExamResult("Biology", "Unit Test 2", 23, 25, "", ""),
+            SubjectExamResult("Telugu", "Unit Test 2", 24, 25, "", ""),
+            SubjectExamResult("Hindi", "Unit Test 2", 22, 25, "", ""),
             SubjectExamResult("English", "Unit Test 2", 24, 25, "", ""),
             SubjectExamResult("Social Studies", "Unit Test 2", 21, 25, "", ""),
             SubjectExamResult("Computer Science", "Unit Test 2", 24, 25, "", "")
@@ -1229,8 +1237,10 @@ object DiscussionRepository {
             SubjectExamResult("Physics", "Quarterly Exam", 89, 100, "", ""),
             SubjectExamResult("Chemistry", "Quarterly Exam", 87, 100, "", ""),
             SubjectExamResult("Biology", "Quarterly Exam", 92, 100, "", ""),
-            SubjectExamResult("English", "Quarterly Exam", 90, 100, "", ""),
-            SubjectExamResult("Social Studies", "Quarterly Exam", 86, 100, "", ""),
+            SubjectExamResult("Telugu", "Quarterly Exam", 91, 100, "", ""),
+            SubjectExamResult("Hindi", "Quarterly Exam", 86, 100, "", ""),
+            SubjectExamResult("English", "Quarterly Exam", 92, 100, "", ""),
+            SubjectExamResult("Social Studies", "Quarterly Exam", 88, 100, "", ""),
             SubjectExamResult("Computer Science", "Quarterly Exam", 96, 100, "", "")
         ),
         "Half-Yearly Exam" to listOf(
@@ -1238,8 +1248,10 @@ object DiscussionRepository {
             SubjectExamResult("Physics", "Half-Yearly Exam", 92, 100, "", ""),
             SubjectExamResult("Chemistry", "Half-Yearly Exam", 89, 100, "", ""),
             SubjectExamResult("Biology", "Half-Yearly Exam", 94, 100, "", ""),
-            SubjectExamResult("English", "Half-Yearly Exam", 91, 100, "", ""),
-            SubjectExamResult("Social Studies", "Half-Yearly Exam", 88, 100, "", ""),
+            SubjectExamResult("Telugu", "Half-Yearly Exam", 93, 100, "", ""),
+            SubjectExamResult("Hindi", "Half-Yearly Exam", 88, 100, "", ""),
+            SubjectExamResult("English", "Half-Yearly Exam", 95, 100, "", ""),
+            SubjectExamResult("Social Studies", "Half-Yearly Exam", 90, 100, "", ""),
             SubjectExamResult("Computer Science", "Half-Yearly Exam", 98, 100, "", "")
         ),
         "Final Annual Exam" to listOf(
@@ -1247,8 +1259,10 @@ object DiscussionRepository {
             SubjectExamResult("Physics", "Final Annual Exam", 94, 100, "", ""),
             SubjectExamResult("Chemistry", "Final Annual Exam", 91, 100, "", ""),
             SubjectExamResult("Biology", "Final Annual Exam", 95, 100, "", ""),
-            SubjectExamResult("English", "Final Annual Exam", 93, 100, "", ""),
-            SubjectExamResult("Social Studies", "Final Annual Exam", 90, 100, "", ""),
+            SubjectExamResult("Telugu", "Final Annual Exam", 95, 100, "", ""),
+            SubjectExamResult("Hindi", "Final Annual Exam", 90, 100, "", ""),
+            SubjectExamResult("English", "Final Annual Exam", 96, 100, "", ""),
+            SubjectExamResult("Social Studies", "Final Annual Exam", 92, 100, "", ""),
             SubjectExamResult("Computer Science", "Final Annual Exam", 99, 100, "", "")
         )
     )
