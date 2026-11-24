@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,16 +27,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -44,8 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
+import com.schoolapp.android.R
 import com.schoolapp.android.data.*
 import com.schoolapp.android.ui.theme.GenesisColors
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 import java.io.File
 import java.io.FileOutputStream
 
@@ -122,16 +129,18 @@ fun RoleSpecificSmartDashboardSection(
         )
     }
 
+    val brand = LocalSchoolBrand.current
     when (currentRole) {
         AppRole.ADMIN -> {
-            // MANAGEMENT & PRINCIPAL "SCHOOL OS" COCKPIT
+            // ADMIN WORKSPACE — Clean, calm white-surface UI matching Teacher Workspace & reference palette
             Card(
-                colors = CardDefaults.cardColors(containerColor = GenesisColors.MeteorBlack),
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+                colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GenesisColors.Border),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -140,28 +149,23 @@ fun RoleSpecificSmartDashboardSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Surface(
-                                color = Color(0xFF1E3A8A),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Text(
-                                    text = "🏛️ SCHOOL OPERATING SYSTEM • OWNER & PRINCIPAL",
-                                    color = GenesisColors.SkyAccent,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "One School. One Connected Platform.",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                text = "SCHOOL OPERATING SYSTEM",
+                                color = GenesisColors.Teal,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "One School. One Platform.",
+                                color = GenesisColors.TextPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Surface(
-                            color = Color(0xFF14532D),
+                            color = Color(0xFFDCFCE7),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.clickable { onOpenSchoolIntelligence() }
                         ) {
@@ -169,26 +173,26 @@ fun RoleSpecificSmartDashboardSection(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text("4.0x ROI", color = Color(0xFF86EFAC), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-                                Text("₹20k Saved/mo", color = Color.White, fontSize = 9.sp)
+                                Text("4.0x ROI", color = GenesisColors.Success, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("₹20k/mo", color = GenesisColors.TextSecondary, fontSize = 10.sp)
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Leakage Prevention Alert Bar
+                    // Leakage Prevention Alert Bar (Clean Semantic Warning Card)
                     if (openLeakageCount > 0) {
                         Surface(
-                            color = Color(0xFF451A03),
+                            color = Color(0xFFFFFBEB),
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpenSchoolIntelligence() }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -196,44 +200,59 @@ fun RoleSpecificSmartDashboardSection(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(
-                                        Icons.Default.Security,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFBBF24),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Financial Leakage Prevention: $openLeakageCount items flagged (₹4.25L recoverable)",
-                                        color = Color(0xFFFDE68A),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .background(Color(0xFFFEF3C7), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Security,
+                                            contentDescription = null,
+                                            tint = GenesisColors.Warning,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Financial Leakage Alert",
+                                            color = GenesisColors.TextPrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = "$openLeakageCount items flagged • ₹4.25L recoverable",
+                                            color = GenesisColors.TextSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Review →",
-                                    color = Color(0xFFFBBF24),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold
+                                    text = "Review",
+                                    color = GenesisColors.Primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    // 2x4 Executive OS Module Pills
+                    // 2x4 Executive OS Module Grid (Neutral cards + Primary blue / Teal rounded icons)
                     val adminActions = listOf(
-                        Triple("Intelligence & ROI", Icons.Default.Analytics, onOpenSchoolIntelligence),
-                        Triple("Verify Students ($pendingVerifications)", Icons.Default.VerifiedUser, onOpenSectionVerification),
-                        Triple("Automation Engine", Icons.Default.Bolt, onOpenAutomationEngine),
-                        Triple("Admissions CRM", Icons.Default.PersonAddAlt1, onOpenAdmissionsCrm),
-                        Triple("Substitution Hub", Icons.Default.SwapHoriz, onOpenSubstitutionHub),
-                        Triple("Staff & Transport", Icons.Default.DirectionsBus, onOpenStaffTransport),
-                        Triple("360° Student Record", Icons.Default.FolderShared, onOpenStudent360),
-                        Triple("School AI Copilot", Icons.Default.AutoAwesome, onOpenAiAssistant)
+                        Triple("Intelligence & ROI", Icons.Rounded.Analytics, onOpenSchoolIntelligence),
+                        Triple("Verify Students ($pendingVerifications)", Icons.Rounded.VerifiedUser, onOpenSectionVerification),
+                        Triple("Automation Engine", Icons.Rounded.Bolt, onOpenAutomationEngine),
+                        Triple("Admissions CRM", Icons.Rounded.PersonAddAlt1, onOpenAdmissionsCrm),
+                        Triple("Substitution Hub", Icons.Rounded.SwapHoriz, onOpenSubstitutionHub),
+                        Triple("Staff & Transport", Icons.Rounded.DirectionsBus, onOpenStaffTransport),
+                        Triple("360° Student Record", Icons.Rounded.FolderShared, onOpenStudent360),
+                        Triple("School AI Copilot", Icons.Rounded.AutoAwesome, onOpenAiAssistant)
                     )
 
-                    adminActions.chunked(2).forEach { row ->
+                    adminActions.chunked(2).forEachIndexed { rowIdx, row ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -241,33 +260,44 @@ fun RoleSpecificSmartDashboardSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             row.forEach { (label, icon, action) ->
+                                val isPrimaryAction = rowIdx < 2
                                 Surface(
-                                    color = GenesisColors.MeteorSurface,
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+                                    color = GenesisColors.Background,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, GenesisColors.Border),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(42.dp)
+                                        .height(46.dp)
                                         .clickable { action() }
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 10.dp),
+                                            .padding(horizontal = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = label,
-                                            tint = GenesisColors.SkyAccent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(
+                                                    if (isPrimaryAction) GenesisColors.LightBlue else Color(0xFFCCFBF1),
+                                                    RoundedCornerShape(8.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = label,
+                                                tint = if (isPrimaryAction) GenesisColors.Primary else GenesisColors.Teal,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = label,
-                                            color = Color.White,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            color = GenesisColors.TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -277,24 +307,24 @@ fun RoleSpecificSmartDashboardSection(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Proud Parent Branded WhatsApp Status Card + Referral QR Growth Engine CTA
+                    // Primary Action: Classes, Promotion & Section Data Control
                     Button(
-                        onClick = onOpenProudParentQr,
+                        onClick = onOpenClassAndYearManager,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                     ) {
-                        Icon(Icons.Default.QrCode2, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.School, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "🏆 Proud Parent WhatsApp Status Card + Referral QR",
+                            text = "Classes, Year Promotion & Section Control",
                             color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -302,22 +332,23 @@ fun RoleSpecificSmartDashboardSection(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Academic Year Rollover, Create Class/Section & Selective Section Data Control CTA
-                    Button(
-                        onClick = onOpenClassAndYearManager,
+                    // Secondary Action: Proud Parent Status Card + Referral QR
+                    OutlinedButton(
+                        onClick = onOpenProudParentQr,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A))
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, GenesisColors.Teal),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GenesisColors.Teal)
                     ) {
-                        Icon(Icons.Default.School, contentDescription = null, tint = GenesisColors.SkyAccent, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.QrCode2, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "🎓 Classes, Year Promotion & Section Data Control",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            text = "Proud Parent Status Card + Referral QR",
+                            color = GenesisColors.Teal,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -327,14 +358,15 @@ fun RoleSpecificSmartDashboardSection(
         }
 
         AppRole.TEACHER -> {
-            // TEACHER "TEACHER OS" ZERO-FRICTION COCKPIT
+            // TEACHER WORKSPACE — Clean, calm white-surface UI following the reference palette
             Card(
-                colors = CardDefaults.cardColors(containerColor = GenesisColors.MeteorBlack),
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+                colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GenesisColors.Border),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -343,56 +375,52 @@ fun RoleSpecificSmartDashboardSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Surface(
-                                color = Color(0xFF3B0764),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Text(
-                                    text = "👩‍🏫 TEACHER OS • ZERO-FRICTION WORKSPACE",
-                                    color = Color(0xFFD8B4FE),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "TEACHER WORKSPACE",
+                                color = GenesisColors.Teal,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "${selectedClass.name} Daily Command",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                color = GenesisColors.TextPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Surface(
-                            color = Color(0xFF14532D),
-                            shape = RoundedCornerShape(10.dp)
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
-                                text = "⏱ 42m Saved Today",
-                                color = Color(0xFF86EFAC),
+                                text = "42m Saved",
+                                color = GenesisColors.Success,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Highlighted Section Student Login Verification Alert Banner
+                    // Student Verification Status Row
+                    val hasPending = pendingVerifications > 0
                     Surface(
-                        color = if (pendingVerifications > 0) Color(0xFF451A03) else Color(0xFF064E3B),
+                        color = if (hasPending) Color(0xFFFFFBEB) else Color(0xFFF0FDF4),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(
                             1.dp,
-                            if (pendingVerifications > 0) Color(0xFFF59E0B) else Color(0xFF10B981)
+                            if (hasPending) Color(0xFFFDE68A) else Color(0xFFBBF7D0)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenSectionVerification() }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -400,27 +428,39 @@ fun RoleSpecificSmartDashboardSection(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.VerifiedUser,
-                                    contentDescription = null,
-                                    tint = if (pendingVerifications > 0) Color(0xFFFBBF24) else Color(0xFF34D399),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(
+                                            if (hasPending) Color(0xFFFEF3C7) else Color(0xFFDCFCE7),
+                                            RoundedCornerShape(10.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.VerifiedUser,
+                                        contentDescription = null,
+                                        tint = if (hasPending) GenesisColors.Warning else GenesisColors.Success,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
                                         text = "Student Verification (${selectedClass.name})",
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
+                                        color = GenesisColors.TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "$pendingVerifications Pending  •  $blockedCount Blocked",
-                                        color = if (pendingVerifications > 0) Color(0xFFFDE68A) else Color(0xFFA7F3D0),
-                                        fontSize = 11.sp
+                                        text = "$pendingVerifications Pending • $blockedCount Blocked",
+                                        color = GenesisColors.TextSecondary,
+                                        fontSize = 12.sp
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 color = GenesisColors.Primary,
                                 shape = RoundedCornerShape(8.dp)
@@ -428,27 +468,27 @@ fun RoleSpecificSmartDashboardSection(
                                 Text(
                                     text = "Verify",
                                     color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Teacher / Staff Daily Check-In & HR Desk Strip
+                    // Staff Daily Check-In Row
                     Surface(
-                        color = GenesisColors.MeteorSurface,
+                        color = GenesisColors.Background,
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenStaffHr(1) }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -456,32 +496,41 @@ fun RoleSpecificSmartDashboardSection(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Fingerprint,
-                                    contentDescription = null,
-                                    tint = GenesisColors.SkyAccent,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFCCFBF1), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Fingerprint,
+                                        contentDescription = null,
+                                        tint = GenesisColors.Teal,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = "My Staff Attendance (500 m Campus)",
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
+                                        text = "My Staff Attendance (500 m)",
+                                        color = GenesisColors.TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     val statusSubtitle = when {
                                         myTodayStaffAttendance?.status == "On Leave" -> "On Approved Leave Today"
                                         myTodayStaffAttendance?.checkIn != null -> "${myTodayStaffAttendance.status} • Captured at ${myTodayStaffAttendance.checkIn}"
-                                        else -> "Scan fingerprint within 500 m to capture attendance"
+                                        else -> "Scan fingerprint within 500 m to capture"
                                     }
                                     Text(
                                         text = statusSubtitle,
-                                        color = GenesisColors.SkyAccent,
-                                        fontSize = 11.sp
+                                        color = GenesisColors.TextSecondary,
+                                        fontSize = 12.sp
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(8.dp))
                             if (myTodayStaffAttendance?.checkIn == null && myTodayStaffAttendance?.status != "On Leave") {
                                 Surface(
                                     color = GenesisColors.Success,
@@ -493,79 +542,90 @@ fun RoleSpecificSmartDashboardSection(
                                     Text(
                                         text = if (isCheckingStaffGps) "Checking..." else "Capture",
                                         color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
                                 }
                             } else {
                                 Surface(
-                                    color = GenesisColors.Primary,
+                                    color = GenesisColors.Teal,
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = "Staff HR →",
+                                        text = "Staff HR",
                                         color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     val teacherActions = listOf(
-                        Triple("<60s Roll Call", Icons.Default.HowToReg, onOpenAttendance),
-                        Triple("Student Control ($pendingVerifications)", Icons.Default.VerifiedUser, onOpenSectionVerification),
-                        Triple("Auto Marks & Grades", Icons.Default.AutoAwesome, onOpenMarksAutomation),
-                        Triple("Create Class & Sec", Icons.Default.AddBusiness, onOpenClassAndYearManager),
-                        Triple("Staff Profiles", Icons.Default.Badge) { onOpenStaffHr(0) },
-                        Triple("Staff Attendance", Icons.Default.Login) { onOpenStaffHr(1) },
+                        Triple("Roll Call", Icons.Rounded.HowToReg, onOpenAttendance),
+                        Triple("Student Control ($pendingVerifications)", Icons.Rounded.VerifiedUser, onOpenSectionVerification),
+                        Triple("Marks & Grades", Icons.Rounded.Grade, onOpenMarksAutomation),
+                        Triple("Classes & Sections", Icons.Rounded.DomainAdd, onOpenClassAndYearManager),
+                        Triple("Staff Profiles", Icons.Rounded.Badge) { onOpenStaffHr(0) },
+                        Triple("Staff Attendance", Icons.Rounded.FactCheck) { onOpenStaffHr(1) },
                         Triple(
                             if (myPendingStaffLeaves > 0) "Staff Leave ($myPendingStaffLeaves)" else "Apply Leave",
-                            Icons.Default.EventBusy
+                            Icons.Rounded.EventBusy
                         ) { onOpenStaffHr(2) },
-                        Triple("Holiday Calendar", Icons.Default.EventNote, onOpenCalendar)
+                        Triple("Holiday Calendar", Icons.Rounded.CalendarMonth, onOpenCalendar)
                     )
 
-                    teacherActions.chunked(2).forEach { row ->
+                    teacherActions.chunked(2).forEachIndexed { rowIdx, row ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp),
+                                .padding(bottom = if (rowIdx == teacherActions.chunked(2).lastIndex) 0.dp else 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            row.forEach { (label, icon, action) ->
+                            row.forEachIndexed { colIdx, (label, icon, action) ->
+                                val isPrimaryAction = rowIdx < 2
                                 Surface(
-                                    color = GenesisColors.MeteorSurface,
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+                                    color = GenesisColors.Background,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, GenesisColors.Border),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(42.dp)
+                                        .height(46.dp)
                                         .clickable { action() }
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 10.dp),
+                                            .padding(horizontal = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = label,
-                                            tint = GenesisColors.SkyAccent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(
+                                                    if (isPrimaryAction) GenesisColors.LightBlue else Color(0xFFCCFBF1),
+                                                    RoundedCornerShape(8.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = label,
+                                                tint = if (isPrimaryAction) GenesisColors.Primary else GenesisColors.Teal,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = label,
-                                            color = Color.White,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            color = GenesisColors.TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -576,24 +636,22 @@ fun RoleSpecificSmartDashboardSection(
                     }
 
                     if (currentRole == AppRole.ADMIN) {
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Academic Year Rollover, Student Promotion & Selective Section Data Control (Admin only)
+                        Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = onOpenClassAndYearManager,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A))
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                         ) {
-                            Icon(Icons.Default.School, contentDescription = null, tint = GenesisColors.SkyAccent, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.School, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Classes, Year Promotion & Section Data Control",
                                 color = Color.White,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -607,59 +665,64 @@ fun RoleSpecificSmartDashboardSection(
             // PARENT CONSOLIDATED DAILY SUMMARY CARD ("Today's School Update")
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, GenesisColors.Border),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, brand.borderTint.copy(alpha = 0.45f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.5.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(Color(0xFFDBEAFE), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    CardCornerVectorAccent(
+                        tint = brand.primary,
+                        modifier = Modifier.matchParentSize()
+                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(GenesisColors.LightBlue, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = GenesisColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Today's School Update",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = GenesisColors.TextPrimary
+                                    )
+                                    Text(
+                                        text = "Consolidated Daily Digest • ${activeStudent.fullName}",
+                                        fontSize = 11.sp,
+                                        color = GenesisColors.TextSecondary
+                                    )
+                                }
+                            }
+                            TextButton(onClick = { showParentNotificationPrefsDialog = true }) {
                                 Icon(
-                                    Icons.Default.NotificationsActive,
+                                    Icons.Default.Tune,
                                     contentDescription = null,
-                                    tint = GenesisColors.Primary,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = brand.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Today's School Update",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = GenesisColors.TextPrimary
-                                )
-                                Text(
-                                    text = "Consolidated Daily Digest • ${activeStudent.fullName}",
-                                    fontSize = 11.sp,
-                                    color = GenesisColors.TextSecondary
-                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Alerts", color = brand.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                        TextButton(onClick = { showParentNotificationPrefsDialog = true }) {
-                            Icon(
-                                Icons.Default.Tune,
-                                contentDescription = null,
-                                tint = GenesisColors.Primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Alerts", color = GenesisColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -735,6 +798,7 @@ fun RoleSpecificSmartDashboardSection(
                             fontWeight = FontWeight.ExtraBold
                         )
                     }
+                }
                 }
             }
         }
@@ -3890,9 +3954,109 @@ fun AcademicYearAndClassManagementScreen(
     val homeworkList by DiscussionRepository.homeworkList.collectAsState()
     val rosterList by DiscussionRepository.sectionStudentRoster.collectAsState()
 
-    // 1. State for Creating New Class & Section (Teacher & Admin)
+    // 1. State for Creating / Editing / Deleting Classes & Sections (ADMIN ONLY)
     var newClassInput by remember { mutableStateOf("Class 10") }
-    var newSectionInput by remember { mutableStateOf("D") }
+    var newSectionInput by remember { mutableStateOf("C") }
+    var editingClass by remember { mutableStateOf<SchoolClass?>(null) }
+    var editClassNameInput by remember { mutableStateOf("") }
+    var editSectionInput by remember { mutableStateOf("") }
+    var deletingClass by remember { mutableStateOf<SchoolClass?>(null) }
+
+    // Fetch latest classes from backend API when screen opens
+    LaunchedEffect(Unit) {
+        DiscussionRepository.fetchSchoolClassesFromBackend(coroutineScope)
+    }
+
+    if (editingClass != null) {
+        val target = editingClass!!
+        AlertDialog(
+            onDismissRequest = { editingClass = null },
+            title = { Text("Modify Class & Section", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Rename class or section. All linked students, subjects, notes, and exams will automatically update.",
+                        fontSize = 12.sp,
+                        color = GenesisColors.TextSecondary
+                    )
+                    OutlinedTextField(
+                        value = editClassNameInput,
+                        onValueChange = { editClassNameInput = it },
+                        label = { Text("Class Name (e.g. Class 10)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editSectionInput,
+                        onValueChange = { editSectionInput = it },
+                        label = { Text("Section Name (e.g. A, Rose, IIT)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        DiscussionRepository.updateClassAndSection(
+                            schoolClass = target,
+                            newClassNameInput = editClassNameInput,
+                            newSectionInput = editSectionInput,
+                            scope = coroutineScope
+                        ) { ok, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            if (ok) editingClass = null
+                        }
+                    },
+                    enabled = editClassNameInput.isNotBlank() && editSectionInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                ) {
+                    Text("Save Changes", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingClass = null }) {
+                    Text("Cancel", color = GenesisColors.TextPrimary)
+                }
+            }
+        )
+    }
+
+    if (deletingClass != null) {
+        val target = deletingClass!!
+        AlertDialog(
+            onDismissRequest = { deletingClass = null },
+            title = { Text("Delete ${target.name}?", fontWeight = FontWeight.Bold, color = Color(0xFFDC2626)) },
+            text = {
+                Text(
+                    text = "This will permanently remove ${target.name} from your school classes and student login options.",
+                    fontSize = 13.sp,
+                    color = GenesisColors.TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        DiscussionRepository.deleteClassAndSection(
+                            schoolClass = target,
+                            scope = coroutineScope
+                        ) { ok, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            if (ok) deletingClass = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingClass = null }) {
+                    Text("Cancel", color = GenesisColors.TextPrimary)
+                }
+            }
+        )
+    }
 
     // 2. State for Academic Year Rollover & Bulk Section Promotion
     var sourceClassId by remember(availableClasses) {
@@ -3998,7 +4162,7 @@ fun AcademicYearAndClassManagementScreen(
             }
 
             // =========================================================================
-            // MODULE 1: CREATE NEW CLASS & SECTION (TEACHER & ADMIN PERMISSION)
+            // MODULE 1: CREATE, MODIFY & DELETE CLASSES & SECTIONS (ADMIN ONLY)
             // =========================================================================
             item {
                 Card(
@@ -4020,148 +4184,197 @@ fun AcademicYearAndClassManagementScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "1. Create New Class & Section",
+                                    text = "1. School Classes & Sections Manager",
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 16.sp,
                                     color = GenesisColors.TextPrimary
                                 )
                                 Text(
-                                    text = "Authorized for Teachers & Admins • Live on Student Login",
+                                    text = if (isAdmin) "Admin Only • Create, Rename or Delete • Live on Student Login" else "Read-Only View • Switch to Admin Role to Create/Edit/Delete",
                                     fontSize = 12.sp,
                                     color = GenesisColors.TextSecondary
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        if (isAdmin) {
+                            Spacer(modifier = Modifier.height(14.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = newClassInput,
-                                onValueChange = { newClassInput = it },
-                                label = { Text("Class (e.g. Class 10)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            OutlinedTextField(
-                                value = newSectionInput,
-                                onValueChange = { newSectionInput = it },
-                                label = { Text("Section Name (e.g. A, Rose, IIT)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Quick Select Class:",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GenesisColors.TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            classOptions.forEach { clsName ->
-                                SubjectChip(
-                                    label = clsName,
-                                    selected = newClassInput.equals(clsName, ignoreCase = true),
-                                    onClick = { newClassInput = clsName }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = newClassInput,
+                                    onValueChange = { newClassInput = it },
+                                    label = { Text("Class (e.g. Class 10)") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                OutlinedTextField(
+                                    value = newSectionInput,
+                                    onValueChange = { newSectionInput = it },
+                                    label = { Text("Section Name (e.g. A, Rose, IIT)") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Quick Section Suggestions (or type any name above):",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GenesisColors.TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            listOf("A", "B", "C", "D", "Rose", "Lotus", "IIT", "Alpha").forEach { sec ->
-                                SubjectChip(
-                                    label = sec,
-                                    selected = newSectionInput.equals(sec, ignoreCase = true),
-                                    onClick = { newSectionInput = sec }
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Button(
-                            onClick = {
-                                val created = DiscussionRepository.createNewClassAndSection(
-                                    classNameInput = newClassInput,
-                                    sectionInput = newSectionInput,
-                                    seatCapacity = 40,
-                                    scope = coroutineScope
-                                )
-                                Toast.makeText(
-                                    context,
-                                    "✅ Created ${created.name}! Students can now select it on login.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
-                        ) {
-                            Icon(Icons.Default.AddCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Create Class & Section (Live for Student Login)",
-                                color = Color.White,
+                                text = "Quick Select Class:",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                color = GenesisColors.TextSecondary
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf("LKG", "UKG", "Class 1", "Class 5", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12").forEach { clsName ->
+                                    SubjectChip(
+                                        label = clsName,
+                                        selected = newClassInput.equals(clsName, ignoreCase = true),
+                                        onClick = { newClassInput = clsName }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Quick Section Suggestions (or type any name above):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf("A", "B", "C", "D", "Rose", "Lotus", "IIT", "Alpha").forEach { sec ->
+                                    SubjectChip(
+                                        label = sec,
+                                        selected = newSectionInput.equals(sec, ignoreCase = true),
+                                        onClick = { newSectionInput = sec }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Button(
+                                onClick = {
+                                    val created = DiscussionRepository.createNewClassAndSection(
+                                        classNameInput = newClassInput,
+                                        sectionInput = newSectionInput,
+                                        seatCapacity = 40,
+                                        scope = coroutineScope
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        "✅ Created ${created.name}! Live on Student Login.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                },
+                                enabled = newClassInput.isNotBlank() && newSectionInput.isNotBlank(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                            ) {
+                                Icon(Icons.Default.AddCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Create Class & Section (Live for Student Login)",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Active School Classes & Sections (${availableClasses.size} total):",
-                            fontSize = 11.sp,
+                            text = "Active School Classes & Sections (${availableClasses.size} in DB):",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GenesisColors.TextSecondary
+                            color = GenesisColors.TextPrimary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            availableClasses.forEach { schoolClass ->
-                                Surface(
-                                    color = Color(0xFFEFF6FF),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
-                                ) {
-                                    Text(
-                                        text = schoolClass.name,
-                                        color = GenesisColors.Primary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (availableClasses.isEmpty()) {
+                            Text(
+                                text = "No classes created yet.",
+                                fontSize = 12.sp,
+                                color = GenesisColors.TextSecondary
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                availableClasses.forEach { schoolClass ->
+                                    Surface(
+                                        color = Color(0xFFF8FAFC),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, GenesisColors.Border),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = schoolClass.name,
+                                                    color = GenesisColors.TextPrimary,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "${schoolClass.studentCount} enrolled students",
+                                                    color = GenesisColors.TextSecondary,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                            if (isAdmin) {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    IconButton(
+                                                        onClick = {
+                                                            editClassNameInput = schoolClass.className.ifBlank { schoolClass.name.substringBefore("–").trim() }
+                                                            editSectionInput = schoolClass.section.ifBlank { schoolClass.name.substringAfter("Section", "A").trim() }
+                                                            editingClass = schoolClass
+                                                        }
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Edit,
+                                                            contentDescription = "Edit Class",
+                                                            tint = GenesisColors.Primary,
+                                                            modifier = Modifier.size(19.dp)
+                                                        )
+                                                    }
+                                                    IconButton(
+                                                        onClick = { deletingClass = schoolClass }
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Delete,
+                                                            contentDescription = "Delete Class",
+                                                            tint = Color(0xFFDC2626),
+                                                            modifier = Modifier.size(19.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -4208,7 +4421,7 @@ fun AcademicYearAndClassManagementScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        val currentSourceClass = availableClasses.find { it.id == sourceClassId } ?: availableClasses.first()
+                        val currentSourceClass = availableClasses.find { it.id == sourceClassId } ?: availableClasses.firstOrNull() ?: SchoolClass("class-10a", "Class 10 – Section A", 0)
                         ClassSectionDropdownButton(
                             selectedClass = currentSourceClass,
                             availableClasses = availableClasses,

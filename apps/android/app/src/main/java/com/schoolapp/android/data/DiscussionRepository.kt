@@ -1,6 +1,7 @@
 package com.schoolapp.android.data
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,12 +9,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 enum class AppRole(val displayName: String, val badgeColor: Long) {
     PARENT("Parent", 0xFF2563EB),
@@ -237,10 +240,24 @@ data class ParentAbsenceExplanation(
     val status: String = "Submitted by Parent" // "Pending Parent Note", "Submitted by Parent", "Approved by Teacher"
 )
 
+data class SchoolBranding(
+    val id: String = "00000000-0000-0000-0000-000000000001",
+    val schoolCode: String = "GENESIS",
+    val name: String = "Genesis School Beeramguda",
+    val slug: String = "genesis-high-school",
+    val tagline: String = "Official Student & Parent Portal",
+    val logoUrl: String = "",
+    val primaryColorHex: String = "#1E40AF",
+    val accentColorHex: String = "#38BDF8"
+)
+
 data class SchoolClass(
     val id: String,
     val name: String,
-    val studentCount: Int = 38
+    val studentCount: Int = 0,
+    val dbUuid: String = "",
+    val className: String = "",
+    val section: String = ""
 )
 
 data class ClassNote(
@@ -269,7 +286,11 @@ data class AdminNotice(
     val eventTime: String = "09:00 AM onwards",
     val attachmentName: String = "Event_Schedule_2026.pdf",
     val attachmentSize: String = "2.4 MB",
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val targetAudience: String = "Entire School",
+    val startsAtIso: String? = null,
+    val expiresAtIso: String? = null,
+    val scheduleStatus: String = "ACTIVE"
 )
 
 data class DiscussionReply(
@@ -489,27 +510,36 @@ data class LibraryBookItem(
 object DiscussionRepository {
     private const val BASE_URL = "http://10.0.2.2:4000/api/v1"
     private const val PREFS_NAME = "genesis_student_prefs"
+    private val ioScope = CoroutineScope(Dispatchers.IO)
 
-    private val _classOptions = MutableStateFlow(
-        listOf(
-            "Class 5",
-            "Class 6",
-            "Class 7",
-            "Class 8",
-            "Class 9",
-            "Class 10",
-            "Class 11",
-            "Class 12"
-        )
-    )
+    private val defaultSchoolClasses: List<SchoolClass> = (1..10).flatMap { grade ->
+        val clsName = "Class $grade"
+        listOf("A", "B", "C", "D", "E").map { sec ->
+            SchoolClass(
+                id = "class-$grade${sec.lowercase()}",
+                name = "$clsName – Section $sec",
+                studentCount = 0,
+                className = clsName,
+                section = sec
+            )
+        }
+    }
+
+    private val _classOptions = MutableStateFlow((1..10).map { "Class $it" })
     val classOptionsFlow: StateFlow<List<String>> = _classOptions.asStateFlow()
     val classOptions: List<String> get() = _classOptions.value
 
-    private val _sectionOptions = MutableStateFlow(
-        listOf("A", "B", "C", "D", "E", "F")
-    )
+    private val _sectionOptions = MutableStateFlow(listOf("A", "B", "C", "D", "E"))
     val sectionOptionsFlow: StateFlow<List<String>> = _sectionOptions.asStateFlow()
     val sectionOptions: List<String> get() = _sectionOptions.value
+
+    private val _sectionsByClass = MutableStateFlow(
+        (1..10).associate { "Class $it" to listOf("A", "B", "C", "D", "E") }
+    )
+    val sectionsByClassFlow: StateFlow<Map<String, List<String>>> = _sectionsByClass.asStateFlow()
+
+    private val _classesLoading = MutableStateFlow(false)
+    val classesLoadingFlow: StateFlow<Boolean> = _classesLoading.asStateFlow()
 
     val allSchoolSubjects = listOf(
         "Mathematics",
@@ -538,36 +568,395 @@ object DiscussionRepository {
         "class-5a" to listOf("Mathematics", "English", "Science", "Social Studies", "Hindi", "Telugu"),
         "class-5f" to listOf("Mathematics", "English", "Science", "Social Studies", "Hindi", "Telugu")
     )
-    private val _classSubjectsMap = MutableStateFlow(initialClassSubjects)
+    private val _classSubjectsMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val classSubjectsMap: StateFlow<Map<String, List<String>>> = _classSubjectsMap.asStateFlow()
 
     fun getSubjectsForClass(classId: String): List<String> {
-        return _classSubjectsMap.value[classId] ?: listOf(
-            "Mathematics",
-            "Physics",
-            "Chemistry",
-            "Biology",
-            "Telugu",
-            "Hindi",
-            "English",
-            "Social Studies"
+        return _classSubjectsMap.value[classId].orEmpty()
+    }
+
+    private val _availableClasses = MutableStateFlow(defaultSchoolClasses)
+    val availableClassesFlow: StateFlow<List<SchoolClass>> = _availableClasses.asStateFlow()
+    val availableClasses: List<SchoolClass> get() = _availableClasses.value
+
+    private fun rebuildClassOptionFlows(classes: List<SchoolClass>) {
+        val grouped = linkedMapOf<String, MutableList<String>>()
+        val allSections = linkedSetOf<String>()
+        classes.forEach { sc ->
+            val clsName = sc.className.ifBlank { sc.name.substringBefore("–").trim() }
+            val secName = sc.section.ifBlank { sc.name.substringAfter("Section", "A").trim() }
+            if (clsName.isNotBlank()) {
+                val list = grouped.getOrPut(clsName) { mutableListOf() }
+                if (secName.isNotBlank() && !list.any { it.equals(secName, ignoreCase = true) }) {
+                    list.add(secName)
+                }
+            }
+            if (secName.isNotBlank()) {
+                allSections.add(secName)
+            }
+        }
+        _availableClasses.value = classes
+        _classOptions.value = grouped.keys.toList()
+        _sectionsByClass.value = grouped.mapValues { it.value.toList() }
+        _sectionOptions.value = allSections.toList()
+    }
+
+    private val _activeSchool = MutableStateFlow(SchoolBranding())
+    val activeSchool: StateFlow<SchoolBranding> = _activeSchool.asStateFlow()
+
+    @Volatile
+    private var authToken: String = ""
+
+    /**
+     * Opens an HttpURLConnection pre-populated with strict multi-tenant school headers
+     * (`x-school-id`, `x-school-slug`, and `Authorization` JWT when logged in)
+     * so every single API call across the app is 100% isolated per school and role.
+     */
+    private fun openSchoolHttpConnection(url: URL): HttpURLConnection {
+        return (url.openConnection() as HttpURLConnection).apply {
+            setRequestProperty("x-school-id", _activeSchool.value.id)
+            setRequestProperty("x-school-slug", _activeSchool.value.slug)
+            if (authToken.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer $authToken")
+            }
+        }
+    }
+
+    private fun parseSchoolBranding(obj: JSONObject?): SchoolBranding {
+        if (obj == null) return _activeSchool.value
+        return SchoolBranding(
+            id = obj.optString("id", _activeSchool.value.id),
+            schoolCode = obj.optString("school_code", _activeSchool.value.schoolCode),
+            name = obj.optString("name", _activeSchool.value.name),
+            slug = obj.optString("slug", _activeSchool.value.slug),
+            tagline = obj.optString("tagline", _activeSchool.value.tagline),
+            logoUrl = obj.optString("logo_url", ""),
+            primaryColorHex = obj.optString("primary_color", "#1E40AF"),
+            accentColorHex = obj.optString("accent_color", "#38BDF8")
         )
     }
 
-    private val _availableClasses = MutableStateFlow(
-        listOf(
-            SchoolClass("class-10c", "Class 10 – Section C", 36),
-            SchoolClass("class-10a", "Class 10 – Section A", 38),
-            SchoolClass("class-10b", "Class 10 – Section B", 36),
-            SchoolClass("class-9a", "Class 9 – Section A", 40),
-            SchoolClass("class-9b", "Class 9 – Section B", 39),
-            SchoolClass("class-8a", "Class 8 – Section A", 37),
-            SchoolClass("class-5a", "Class 5 – Section A", 34),
-            SchoolClass("class-5f", "Class 5 – Section F", 35)
+    private fun persistSchoolBranding(context: Context?, branding: SchoolBranding) {
+        _activeSchool.value = branding
+        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()
+            ?.putString("school_id", branding.id)
+            ?.putString("school_code", branding.schoolCode)
+            ?.putString("school_name", branding.name)
+            ?.putString("school_slug", branding.slug)
+            ?.putString("school_tagline", branding.tagline)
+            ?.putString("school_logo_url", branding.logoUrl)
+            ?.putString("school_primary_color", branding.primaryColorHex)
+            ?.putString("school_accent_color", branding.accentColorHex)
+            ?.apply()
+    }
+
+    fun resolveSchoolByCode(
+        code: String,
+        context: Context? = appContext,
+        scope: CoroutineScope = ioScope,
+        onResult: (Boolean, String, SchoolBranding?) -> Unit = { _, _, _ -> }
+    ) {
+        val cleanCode = code.trim().uppercase()
+        if (cleanCode.isBlank()) {
+            onResult(false, "Please enter a School Code", null)
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/schools/resolve?code=${java.net.URLEncoder.encode(cleanCode, "UTF-8")}")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                }
+                val respCode = conn.responseCode
+                val body = (if (respCode in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val json = runCatching { JSONObject(body) }.getOrNull()
+                if (respCode in 200..299 && json != null && json.optBoolean("success")) {
+                    val branding = parseSchoolBranding(json.optJSONObject("data")?.optJSONObject("school"))
+                    persistSchoolBranding(context, branding)
+                    fetchSchoolClassesFromBackend(scope)
+                    withContext(Dispatchers.Main) {
+                        onResult(true, "Switched to ${branding.name}", branding)
+                    }
+                } else {
+                    val errMsg = json?.optString("error").orEmpty().ifBlank { "School code '$cleanCode' not found" }
+                    withContext(Dispatchers.Main) {
+                        onResult(false, errMsg, null)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Could not verify school code: ${e.message}", null)
+                }
+            }
+        }
+    }
+
+    fun registerWithPassword(
+        context: Context,
+        schoolCode: String,
+        role: AppRole,
+        accessCode: String,
+        fullName: String,
+        phone: String,
+        password: String,
+        className: String = "Class 10",
+        section: String = "A",
+        parentEmail: String = "",
+        address: String = "",
+        childName: String = "",
+        employeeId: String = "",
+        department: String = "",
+        designation: String = "",
+        scope: CoroutineScope,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/auth/register")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-school-id", _activeSchool.value.id)
+                    setRequestProperty("x-user-role", role.name)
+                    setRequestProperty("x-student-name", fullName)
+                }
+                val payload = JSONObject().apply {
+                    put("school_code", schoolCode.trim().uppercase())
+                    put("role", role.name)
+                    put("access_code", accessCode.trim().uppercase())
+                    put("full_name", fullName.trim())
+                    put("phone", phone.trim())
+                    put("email", parentEmail.trim())
+                    put("password", password)
+                    put("class_name", className)
+                    put("section", section)
+                    put("parent_phone", phone.trim())
+                    put("parent_email", parentEmail.trim())
+                    put("address", address.trim())
+                    put("child_name", childName.trim())
+                    put("employee_id", employeeId.trim())
+                    put("department", department.trim())
+                    put("designation", designation.trim())
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val json = runCatching { JSONObject(body) }.getOrNull()
+                if (code in 200..299 && json != null && json.optBoolean("success")) {
+                    val data = json.optJSONObject("data")
+                    val token = data?.optString("access_token", "").orEmpty()
+                    if (token.isNotBlank()) {
+                        authToken = token
+                    }
+                    val branding = parseSchoolBranding(data?.optJSONObject("school"))
+                    persistSchoolBranding(context, branding)
+                    val userObj = data?.optJSONObject("user")
+                    applyAuthenticatedUserSession(context, userObj, role, branding, token, scope)
+                    withContext(Dispatchers.Main) {
+                        onResult(true, json.optString("message", "Account created successfully"))
+                    }
+                } else {
+                    val err = json?.optString("error").orEmpty().ifBlank { "Sign up failed. Please check your details and secret code." }
+                    withContext(Dispatchers.Main) { onResult(false, err) }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, "Unable to connect. Please check your internet and try again.") }
+            }
+        }
+    }
+
+    fun signInWithPassword(
+        context: Context,
+        schoolCode: String,
+        role: AppRole,
+        accessCode: String,
+        phone: String,
+        password: String,
+        scope: CoroutineScope,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/auth/signin")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-school-id", _activeSchool.value.id)
+                }
+                val payload = JSONObject().apply {
+                    put("school_code", schoolCode.trim().uppercase())
+                    put("role", role.name)
+                    put("access_code", accessCode.trim().uppercase())
+                    put("phone", phone.trim())
+                    put("password", password)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val json = runCatching { JSONObject(body) }.getOrNull()
+                if (code in 200..299 && json != null && json.optBoolean("success")) {
+                    val data = json.optJSONObject("data")
+                    val token = data?.optString("access_token", "").orEmpty()
+                    if (token.isNotBlank()) {
+                        authToken = token
+                    }
+                    val branding = parseSchoolBranding(data?.optJSONObject("school"))
+                    persistSchoolBranding(context, branding)
+                    val userObj = data?.optJSONObject("user")
+                    val roleStr = userObj?.optString("role", role.name).orEmpty().uppercase()
+                    val resolvedRole = when (roleStr) {
+                        "ADMIN" -> AppRole.ADMIN
+                        "TEACHER" -> AppRole.TEACHER
+                        "PARENT" -> AppRole.PARENT
+                        else -> AppRole.STUDENT
+                    }
+                    applyAuthenticatedUserSession(context, userObj, resolvedRole, branding, token, scope)
+                    withContext(Dispatchers.Main) {
+                        onResult(true, json.optString("message", "Signed in!"))
+                    }
+                } else {
+                    val err = json?.optString("error").orEmpty().ifBlank { "Invalid credentials or role secret code." }
+                    withContext(Dispatchers.Main) { onResult(false, err) }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, "Unable to connect. Please check your internet and try again.") }
+            }
+        }
+    }
+
+    fun logout(context: Context) {
+        authToken = ""
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean("is_logged_in", false)
+            .remove("auth_token")
+            .remove("user_role")
+            .remove("student_id")
+            .remove("student_code")
+            .remove("roll_no")
+            .remove("full_name")
+            .remove("class_name")
+            .remove("section")
+            .remove("parent_phone")
+            .remove("parent_email")
+            .remove("address")
+            .apply()
+        currentRole.value = AppRole.STUDENT
+        isStudentLoggedIn.value = false
+    }
+
+    private fun applyAuthenticatedUserSession(
+        context: Context,
+        userObj: JSONObject?,
+        role: AppRole,
+        branding: SchoolBranding,
+        token: String,
+        scope: CoroutineScope
+    ) {
+        val uid = userObj?.optString("id", "").orEmpty().ifBlank { "usr-${System.currentTimeMillis()}" }
+        val fullName = userObj?.optString("full_name", "User").orEmpty()
+        val className = userObj?.optString("class_name", "Class 10").orEmpty().ifBlank { "Class 10" }
+        val section = userObj?.optString("section", "A").orEmpty().ifBlank { "A" }
+        val parentPhone = userObj?.optString("parent_phone", userObj.optString("phone", "")).orEmpty()
+        val parentEmail = userObj?.optString("parent_email", "").orEmpty()
+        val address = userObj?.optString("address", "").orEmpty()
+        val studentCode = userObj?.optString("student_code", "").orEmpty()
+        val rollNo = userObj?.optString("roll_no", "").orEmpty()
+
+        currentRole.value = role
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean("is_logged_in", true)
+            .putBoolean("is_profile_locked", true)
+            .putString("auth_token", token)
+            .putString("user_role", role.name)
+            .putString("student_id", uid)
+            .putString("student_code", studentCode)
+            .putString("roll_no", rollNo)
+            .putString("full_name", fullName)
+            .putString("class_name", className)
+            .putString("section", section)
+            .putString("parent_phone", parentPhone)
+            .putString("parent_email", parentEmail)
+            .putString("address", address)
+            .apply()
+
+        val resolvedClassId = userObj?.optString("class_id", "").orEmpty().ifBlank { buildCanonicalClassId(className, section) }
+        applyStudentSessionLocally(
+            studentId = uid,
+            studentCode = studentCode,
+            fullName = fullName,
+            className = className,
+            section = section,
+            classId = resolvedClassId,
+            parentPhone = parentPhone,
+            parentEmail = parentEmail,
+            address = address,
+            scope = scope
         )
-    )
-    val availableClassesFlow: StateFlow<List<SchoolClass>> = _availableClasses.asStateFlow()
-    val availableClasses: List<SchoolClass> get() = _availableClasses.value
+        fetchSchoolClassesFromBackend(scope)
+        isStudentLoggedIn.value = true
+    }
+
+    fun fetchSchoolClassesFromBackend(scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            _classesLoading.value = true
+            try {
+                val schoolId = _activeSchool.value.id
+                val url = URL("$BASE_URL/classes?school_id=$schoolId")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("x-school-id", schoolId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                }
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    val arr = json.optJSONObject("data")?.optJSONArray("classes")
+                    val fetched = mutableListOf<SchoolClass>()
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            val clsName = obj.optString("class_name", "")
+                            val sec = obj.optString("section", "A")
+                            val id = obj.optString("id", buildCanonicalClassId(clsName, sec))
+                            val dbUuid = obj.optString("db_uuid", "")
+                            val displayName = obj.optString("name", "$clsName – Section $sec")
+                            val studentCount = obj.optInt("studentCount", 0)
+                            fetched.add(
+                                SchoolClass(
+                                    id = id,
+                                    name = displayName,
+                                    studentCount = studentCount,
+                                    dbUuid = dbUuid,
+                                    className = clsName,
+                                    section = sec
+                                )
+                            )
+                        }
+                    }
+                    if (fetched.isNotEmpty()) {
+                        rebuildClassOptionFlows(fetched)
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                _classesLoading.value = false
+            }
+        }
+    }
 
     private val _currentAcademicYear = MutableStateFlow("2026-2027")
     val currentAcademicYear: StateFlow<String> = _currentAcademicYear.asStateFlow()
@@ -621,7 +1010,15 @@ object DiscussionRepository {
     val isStudentLoggedIn = MutableStateFlow(false)
     val currentRole = MutableStateFlow(AppRole.STUDENT)
     val activeStudent = MutableStateFlow(initialStudents[0])
-    val selectedClass = MutableStateFlow(availableClasses.first { it.id == "class-10c" })
+    val selectedClass = MutableStateFlow(
+        SchoolClass(
+            id = "class-10a",
+            name = "Class 10 – Section A",
+            studentCount = 0,
+            className = "Class 10",
+            section = "A"
+        )
+    )
 
     // Notices
     private val initialNotices = listOf(
@@ -664,7 +1061,7 @@ object DiscussionRepository {
             attachmentSize = "840 KB"
         )
     )
-    private val _homeNotices = MutableStateFlow(initialNotices)
+    private val _homeNotices = MutableStateFlow<List<AdminNotice>>(emptyList())
     val homeNotices: StateFlow<List<AdminNotice>> = _homeNotices.asStateFlow()
 
     // Notes (Includes instant Dummy Test PDF + full curriculum PDFs)
@@ -740,7 +1137,7 @@ object DiscussionRepository {
             date = "Oct 7, 2026"
         )
     )
-    private val _studyNotes = MutableStateFlow(initialNotes)
+    private val _studyNotes = MutableStateFlow<List<ClassNote>>(emptyList())
     val studyNotes: StateFlow<List<ClassNote>> = _studyNotes.asStateFlow()
 
     // Discussions
@@ -832,7 +1229,7 @@ object DiscussionRepository {
             )
         )
     )
-    private val _discussions = MutableStateFlow(initialPosts)
+    private val _discussions = MutableStateFlow<List<DiscussionPost>>(emptyList())
     val discussions: StateFlow<List<DiscussionPost>> = _discussions.asStateFlow()
 
     // Timetable
@@ -913,7 +1310,7 @@ object DiscussionRepository {
             projectType = "Assignment"
         )
     )
-    private val _homeworkList = MutableStateFlow(initialHomework)
+    private val _homeworkList = MutableStateFlow<List<HomeworkItem>>(emptyList())
     val homeworkList: StateFlow<List<HomeworkItem>> = _homeworkList.asStateFlow()
 
     // Examination Schedules
@@ -984,7 +1381,15 @@ object DiscussionRepository {
             maxMarks = 80
         )
     )
-    private val _examSchedules = MutableStateFlow(initialExamSchedules)
+    private var lastLoadedHomeClassId: String? = null
+
+    fun shouldLoadHomeFeedOnce(classId: String): Boolean {
+        if (lastLoadedHomeClassId == classId) return false
+        lastLoadedHomeClassId = classId
+        return true
+    }
+
+    private val _examSchedules = MutableStateFlow<List<ExamScheduleItem>>(emptyList())
     val examSchedules: StateFlow<List<ExamScheduleItem>> = _examSchedules.asStateFlow()
 
     // Sibling Leads & Submissions
@@ -1062,7 +1467,7 @@ object DiscussionRepository {
             submittedAt = "15 Nov 2026, 11:45 AM"
         )
     )
-    private val _siblingSubmissions = MutableStateFlow(initialSiblingSubmissions)
+    private val _siblingSubmissions = MutableStateFlow<List<SiblingSubmission>>(emptyList())
     val siblingSubmissions: StateFlow<List<SiblingSubmission>> = _siblingSubmissions.asStateFlow()
 
     // Mistake Analysis
@@ -1104,7 +1509,7 @@ object DiscussionRepository {
             createdAt = "08 Nov 2026"
         )
     )
-    private val _mistakeAnalysisList = MutableStateFlow(initialMistakes)
+    private val _mistakeAnalysisList = MutableStateFlow<List<MistakeAnalysisItem>>(emptyList())
     val mistakeAnalysisList: StateFlow<List<MistakeAnalysisItem>> = _mistakeAnalysisList.asStateFlow()
 
     // Leave Requests
@@ -1120,7 +1525,7 @@ object DiscussionRepository {
             status = "Approved"
         )
     )
-    private val _leaveRequests = MutableStateFlow(initialLeaveRequests)
+    private val _leaveRequests = MutableStateFlow<List<LeaveRequestItem>>(emptyList())
     val leaveRequests: StateFlow<List<LeaveRequestItem>> = _leaveRequests.asStateFlow()
 
     // Library Books
@@ -1175,7 +1580,7 @@ object DiscussionRepository {
         RosterAttendanceStudent("r-5f-1", "01", "Arjun Reddy", "+91 98707 11223", "Present", "class-5f"),
         RosterAttendanceStudent("r-5f-2", "02", "Diya Joseph", "+91 98808 22334", "Absent", "class-5f")
     )
-    private val _rosterAttendance = MutableStateFlow(initialRoster)
+    private val _rosterAttendance = MutableStateFlow<List<RosterAttendanceStudent>>(emptyList())
     val rosterAttendance: StateFlow<List<RosterAttendanceStudent>> = _rosterAttendance.asStateFlow()
 
     private val _submittedClassesAttendance = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -1184,20 +1589,44 @@ object DiscussionRepository {
     fun submitClassAttendance(classId: String) {
         val timeLabel = nowTimeLabel()
         _submittedClassesAttendance.value = _submittedClassesAttendance.value + (classId to timeLabel)
+        val currentRoster = _rosterAttendance.value.filter { it.classId == classId }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/attendance")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val recordsArr = JSONArray()
+                currentRoster.forEach { stu ->
+                    recordsArr.put(
+                        JSONObject().apply {
+                            put("student_id", stu.id)
+                            put("student_name", stu.studentName)
+                            put("roll_no", stu.rollNo)
+                            put("status", stu.status.uppercase())
+                            put("remarks", "Marked via Teacher 30s Roll Call")
+                        }
+                    )
+                }
+                val payload = JSONObject().apply {
+                    put("class_id", classId)
+                    put("records", recordsArr)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     fun isClassAttendanceSubmitted(classId: String): String? = _submittedClassesAttendance.value[classId]
 
-    // Finished Exams & Subject-Wise Results (Selectable by Exam Dropdown)
-    private val _availableExams = MutableStateFlow(
-        listOf(
-            "Unit Test 1",
-            "Unit Test 2",
-            "Quarterly Exam",
-            "Half-Yearly Exam",
-            "Final Annual Exam"
-        )
-    )
+    // Finished Exams & Subject-Wise Results (Loaded per class from PostgreSQL)
+    private val _availableExams = MutableStateFlow<List<String>>(emptyList())
     val availableExamsFlow: StateFlow<List<String>> = _availableExams.asStateFlow()
     val availableExams: List<String> get() = _availableExams.value
 
@@ -1206,6 +1635,30 @@ object DiscussionRepository {
         if (cleanName.isBlank()) return false
         if (_availableExams.value.any { it.equals(cleanName, ignoreCase = true) }) return false
         _availableExams.value = _availableExams.value + cleanName
+
+        val currentClassId = selectedClass.value.id
+        val defaultMax = if (cleanName.startsWith("Unit Test", ignoreCase = true)) 25 else 100
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/classes/$currentClassId/exams")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("title", cleanName)
+                    put("term", cleanName)
+                    put("class_id", currentClassId)
+                    put("default_max_marks", defaultMax)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return true
     }
 
@@ -1266,10 +1719,10 @@ object DiscussionRepository {
             SubjectExamResult("Computer Science", "Final Annual Exam", 99, 100, "", "")
         )
     )
-    private val _examResultsByExam = MutableStateFlow(initialExamResultsByExam)
+    private val _examResultsByExam = MutableStateFlow<Map<String, List<SubjectExamResult>>>(emptyMap())
     val examResultsByExam: StateFlow<Map<String, List<SubjectExamResult>>> = _examResultsByExam.asStateFlow()
 
-    private val _examResultsFlow = MutableStateFlow(initialExamResultsByExam["Half-Yearly Exam"].orEmpty())
+    private val _examResultsFlow = MutableStateFlow<List<SubjectExamResult>>(emptyList())
     val examResultsFlow: StateFlow<List<SubjectExamResult>> = _examResultsFlow.asStateFlow()
     val examResults: List<SubjectExamResult> get() = _examResultsFlow.value
 
@@ -1336,7 +1789,7 @@ object DiscussionRepository {
         return sheets
     }
 
-    private val _studentExamSheets = MutableStateFlow(buildInitialStudentExamSheets())
+    private val _studentExamSheets = MutableStateFlow<List<StudentExamMarkSheet>>(emptyList())
     val studentExamSheets: StateFlow<List<StudentExamMarkSheet>> = _studentExamSheets.asStateFlow()
 
     // School Holidays (Total School, Class-Specific, Section-Specific) -> Highlighted Green on Calendar
@@ -1389,7 +1842,7 @@ object DiscussionRepository {
         return result
     }
 
-    private val _studentYearlyAttendance = MutableStateFlow(buildInitialYearlyAttendance())
+    private val _studentYearlyAttendance = MutableStateFlow<Map<String, String>>(emptyMap())
     val studentYearlyAttendance: StateFlow<Map<String, String>> = _studentYearlyAttendance.asStateFlow()
 
     // Section-Wise Student Login & Verification Roster (Per Class & Section)
@@ -1500,7 +1953,7 @@ object DiscussionRepository {
             verifiedBy = "Mr. Kumar"
         )
     )
-    private val _sectionStudentRoster = MutableStateFlow(initialSectionStudents)
+    private val _sectionStudentRoster = MutableStateFlow<List<SectionRosterStudent>>(emptyList())
     val sectionStudentRoster: StateFlow<List<SectionRosterStudent>> = _sectionStudentRoster.asStateFlow()
 
     // Central Automation Engine Rules (WHEN -> CHECK CONDITION -> THEN -> RECORD)
@@ -1913,146 +2366,13 @@ object DiscussionRepository {
     }
 
     /**
-     * Ensures that any chosen Class + Section has isolated starter notes, discussions, and homework
-     * so every section displays distinct, isolated content.
+     * All section data is loaded strictly from PostgreSQL via Go backend APIs.
      */
     private fun ensureIsolatedSectionData(classId: String, classTitle: String) {
-        if (_studyNotes.value.none { it.classId == classId }) {
-            val sectionStarterNotes = listOf(
-                ClassNote(
-                    id = "note-$classId-dummy",
-                    classId = classId,
-                    subject = "Mathematics",
-                    title = "Sample_Dummy_Notes_Test_Download",
-                    chapter = "Test PDF Download • $classTitle",
-                    fileUrl = "https://schoolapp.in/notes/${classId}_dummy_sample.pdf",
-                    teacherName = "Genesis Academic Cell",
-                    date = "Today"
-                ),
-                ClassNote(
-                    id = "note-$classId-1",
-                    classId = classId,
-                    subject = "Mathematics",
-                    title = "$classTitle – Chapter 1 & 2 Formula Handbook",
-                    chapter = "Core Syllabus • Mathematics ($classTitle)",
-                    fileUrl = "https://schoolapp.in/notes/${classId}_maths.pdf",
-                    teacherName = "Mr. Kumar",
-                    date = "Oct 10, 2026"
-                ),
-                ClassNote(
-                    id = "note-$classId-2",
-                    classId = classId,
-                    subject = "Physics",
-                    title = "$classTitle – Revision Notes & Solved Numericals",
-                    chapter = "Term 1 Syllabus • Physics ($classTitle)",
-                    fileUrl = "https://schoolapp.in/notes/${classId}_physics.pdf",
-                    teacherName = "Mrs. Gupta",
-                    date = "Oct 9, 2026"
-                )
-            )
-            _studyNotes.value = sectionStarterNotes + _studyNotes.value
-        }
-
-        if (_discussions.value.none { it.classId == classId }) {
-            val sectionStarterPost = DiscussionPost(
-                id = "disc-$classId-welcome",
-                classId = classId,
-                authorName = "Pooja Ma'am",
-                authorRole = "TEACHER",
-                subject = "Mathematics",
-                title = "Welcome to $classTitle Doubt Forum!",
-                content = "Students of $classTitle, post your daily homework and chapter doubts here. All discussions and notes here are isolated specifically for $classTitle.",
-                hasEquationCard = false,
-                timeAgo = "1 hour ago",
-                repliesCount = 1,
-                replies = listOf(
-                    DiscussionReply(
-                        id = "rep-$classId-1",
-                        discussionId = "disc-$classId-welcome",
-                        authorName = "Pooja Ma'am",
-                        authorRole = "TEACHER",
-                        content = "Please tag the exact subject and exercise number when posting a doubt!",
-                        isVerified = true,
-                        likesCount = 6,
-                        timeAgo = "45 mins ago"
-                    )
-                )
-            )
-            _discussions.value = listOf(sectionStarterPost) + _discussions.value
-        }
-
-        if (_homeworkList.value.none { it.classId == classId }) {
-            val sectionStarterHw = listOf(
-                HomeworkItem(
-                    id = "hw-$classId-1",
-                    classId = classId,
-                    subject = "Mathematics",
-                    title = "$classTitle – Chapter Practice Exercise",
-                    dueText = "Due Tomorrow, 08:30 AM",
-                    status = "Due Soon",
-                    instructions = "Complete the assigned section worksheet problems for $classTitle in your fair notebook.",
-                    maxMarks = 10
-                )
-            )
-            _homeworkList.value = sectionStarterHw + _homeworkList.value
-        }
-
-        if (_sectionStudentRoster.value.none { it.classId == classId }) {
-            val cleanNum = classTitle.substringBefore("–").replace("Class", "").trim()
-            val cleanSec = classTitle.substringAfter("Section", "A").trim()
-            val starterSectionRoster = listOf(
-                SectionRosterStudent(
-                    id = "stu-$classId-01",
-                    studentCode = "${(2100..2999).random()}",
-                    rollNo = "01",
-                    fullName = "Aditya Narayan",
-                    classId = classId,
-                    className = "Class $cleanNum",
-                    section = cleanSec,
-                    parentPhone = "+91 98490 12345",
-                    loginTimestamp = "Logged in Today, 07:50 AM",
-                    verificationStatus = "VERIFIED",
-                    verifiedBy = "Class Teacher"
-                ),
-                SectionRosterStudent(
-                    id = "stu-$classId-02",
-                    studentCode = "${(3100..3999).random()}",
-                    rollNo = "02",
-                    fullName = "Divya Spandana",
-                    classId = classId,
-                    className = "Class $cleanNum",
-                    section = cleanSec,
-                    parentPhone = "+91 97011 54321",
-                    loginTimestamp = "Logged in Today, 08:15 AM",
-                    verificationStatus = "PENDING"
-                ),
-                SectionRosterStudent(
-                    id = "stu-$classId-99",
-                    studentCode = "9942",
-                    rollNo = "45",
-                    fullName = "Unknown Login (Suspected Candidate)",
-                    classId = classId,
-                    className = "Class $cleanNum",
-                    section = cleanSec,
-                    parentPhone = "+91 90000 11111",
-                    loginTimestamp = "Logged in Yesterday",
-                    verificationStatus = "BLOCKED",
-                    blockedReason = "Suspected wrong section login; blocked by Class Teacher"
-                )
-            )
-            _sectionStudentRoster.value = _sectionStudentRoster.value + starterSectionRoster
-        }
-
-        if (_rosterAttendance.value.none { it.classId == classId }) {
-            val starterRoster = listOf(
-                RosterAttendanceStudent("r-$classId-1", "01", "Aditya Narayan", "+91 98490 12345", "Present", classId),
-                RosterAttendanceStudent("r-$classId-2", "02", "Divya Spandana", "+91 97011 54321", "Present", classId),
-                RosterAttendanceStudent("r-$classId-3", "03", "Karan Malhotra", "+91 99881 22334", "Present", classId),
-                RosterAttendanceStudent("r-$classId-4", "04", "Sneha Kulkarni", "+91 90112 33445", "Absent", classId)
-            )
-            _rosterAttendance.value = _rosterAttendance.value + starterRoster
-        }
+        // No local dummy or starter data injected; data comes strictly from PostgreSQL DB
     }
+
+    private var appContext: Context? = null
 
     /**
      * Called on app startup in MainActivity.
@@ -2060,7 +2380,28 @@ object DiscussionRepository {
      * go straight to Home screen.
      */
     fun initSession(context: Context, scope: CoroutineScope) {
+        appContext = context.applicationContext
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.contains("school_id")) {
+            _activeSchool.value = SchoolBranding(
+                id = prefs.getString("school_id", "00000000-0000-0000-0000-000000000001") ?: "00000000-0000-0000-0000-000000000001",
+                schoolCode = prefs.getString("school_code", "GENESIS") ?: "GENESIS",
+                name = prefs.getString("school_name", "Genesis School Beeramguda") ?: "Genesis School Beeramguda",
+                slug = prefs.getString("school_slug", "genesis-high-school") ?: "genesis-high-school",
+                tagline = prefs.getString("school_tagline", "Official Student & Parent Portal") ?: "Official Student & Parent Portal",
+                logoUrl = prefs.getString("school_logo_url", "") ?: "",
+                primaryColorHex = prefs.getString("school_primary_color", "#1E40AF") ?: "#1E40AF",
+                accentColorHex = prefs.getString("school_accent_color", "#38BDF8") ?: "#38BDF8"
+            )
+        }
+        val savedRole = prefs.getString("user_role", null)
+        if (savedRole != null) {
+            runCatching { AppRole.valueOf(savedRole) }.getOrNull()?.let { currentRole.value = it }
+        }
+        authToken = prefs.getString("auth_token", "") ?: ""
+        // Live-refresh active school branding (name, tagline, logo, colors) from server on launch
+        // so DB-only school branding updates apply automatically with zero app update needed.
+        resolveSchoolByCode(_activeSchool.value.schoolCode, context, scope)
         if (prefs.contains("campus_lat") && prefs.contains("campus_lng")) {
             _schoolCampusGeofence.value = SchoolCampusGeofence(
                 schoolName = prefs.getString("campus_name", "Eden Garden, Viman Nagar, Pune")
@@ -2179,8 +2520,7 @@ object DiscussionRepository {
             it.id != rosterEntry.id && !it.fullName.equals(fullName, ignoreCase = true)
         }
 
-        fetchDiscussionsFromBackend(classId, scope)
-        fetchNotesFromBackend(classId, scope)
+        // Feature APIs are triggered on demand when the user clicks each feature tile
         return updatedProfile
     }
 
@@ -2250,7 +2590,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/auth/student-login")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
                     connectTimeout = 3000
                     readTimeout = 3000
@@ -2360,7 +2700,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/students/$existingId/class-section")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "PATCH"
                     connectTimeout = 3000
                     readTimeout = 3000
@@ -2453,6 +2793,448 @@ object DiscussionRepository {
         ensureIsolatedSectionData(targetClass.id, targetClass.name)
         fetchDiscussionsFromBackend(targetClass.id, scope)
         fetchNotesFromBackend(targetClass.id, scope)
+        fetchClassSubjectsFromBackend(targetClass.id, scope)
+        fetchClassExamsFromBackend(targetClass.id, scope)
+        fetchStudentExamResultsFromBackend(activeStudent.value.id, scope)
+        fetchHomeworkFromBackend(targetClass.id, scope)
+        fetchNoticesFromBackend(scope)
+        fetchClassRosterFromBackend(targetClass.id, scope)
+    }
+
+    fun fetchHomeworkFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/homework")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val hwArr = json.getJSONObject("data").optJSONArray("homework")
+                        val remoteList = mutableListOf<HomeworkItem>()
+                        if (hwArr != null) {
+                            for (i in 0 until hwArr.length()) {
+                                val hObj = hwArr.getJSONObject(i)
+                                remoteList.add(
+                                    HomeworkItem(
+                                        id = hObj.optString("id"),
+                                        classId = hObj.optString("class_id", classId),
+                                        subject = hObj.optString("subject_name", "Academic"),
+                                        title = hObj.optString("title"),
+                                        dueText = hObj.optString("due_date", "Due Soon"),
+                                        status = "Due Soon",
+                                        instructions = hObj.optString("description")
+                                    )
+                                )
+                            }
+                        }
+                        _homeworkList.value = remoteList + _homeworkList.value.filter { it.classId != classId }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchNoticesFromBackend(scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/posts")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=${selectedClass.value.id}]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val postsArr = json.getJSONObject("data").optJSONArray("posts")
+                        val remoteNotices = mutableListOf<AdminNotice>()
+                        if (postsArr != null) {
+                            for (i in 0 until postsArr.length()) {
+                                val pObj = postsArr.getJSONObject(i)
+                                val rawImg = pObj.optString("image_url", "").takeIf { it.isNotBlank() && it != "null" }
+                                val rawStart = pObj.optString("starts_at", "").takeIf { it.isNotBlank() && it != "null" }
+                                val rawEnd = pObj.optString("expires_at", "").takeIf { it.isNotBlank() && it != "null" }
+                                val formattedDate = runCatching {
+                                    val createdIso = pObj.optString("created_at", "")
+                                    if (createdIso.isNotBlank()) {
+                                        java.time.Instant.parse(createdIso)
+                                            .atZone(java.time.ZoneId.systemDefault())
+                                            .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH))
+                                    } else "Today"
+                                }.getOrDefault("Today")
+                                remoteNotices.add(
+                                    AdminNotice(
+                                        id = pObj.optString("id"),
+                                        title = pObj.optString("title"),
+                                        content = pObj.optString("content"),
+                                        category = pObj.optString("category", "CIRCULAR"),
+                                        author = pObj.optString("author_name", "Principal's Office"),
+                                        date = formattedDate,
+                                        imageUrl = resolveRenderableMediaUrl(rawImg),
+                                        targetAudience = pObj.optString("target_audience", "Entire School").ifBlank { "Entire School" },
+                                        startsAtIso = rawStart,
+                                        expiresAtIso = rawEnd,
+                                        scheduleStatus = pObj.optString("status", "ACTIVE").ifBlank { "ACTIVE" }
+                                    )
+                                )
+                            }
+                        }
+                        _homeNotices.value = remoteNotices
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchClassRosterFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/students")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val stuArr = json.getJSONObject("data").optJSONArray("students")
+                        val remoteRoster = mutableListOf<SectionRosterStudent>()
+                        val remoteAttRoster = mutableListOf<RosterAttendanceStudent>()
+                        if (stuArr != null) {
+                            for (i in 0 until stuArr.length()) {
+                                val sObj = stuArr.getJSONObject(i)
+                                val sId = sObj.optString("id")
+                                val sRoll = sObj.optString("roll_no", "").ifBlank { "%02d".format(i + 1) }
+                                val sName = sObj.optString("full_name")
+                                val sPhone = sObj.optString("parent_phone", "")
+                                val sClassId = sObj.optString("class_id", classId)
+                                remoteRoster.add(
+                                    SectionRosterStudent(
+                                        id = sId,
+                                        studentCode = sObj.optString("student_code", "2258"),
+                                        rollNo = sRoll,
+                                        fullName = sName,
+                                        classId = sClassId,
+                                        className = sObj.optString("class_name", "Class 10"),
+                                        section = sObj.optString("section", "A"),
+                                        parentPhone = sPhone,
+                                        loginTimestamp = "Active Student",
+                                        verificationStatus = sObj.optString("verification_status", "VERIFIED")
+                                    )
+                                )
+                                remoteAttRoster.add(
+                                    RosterAttendanceStudent(
+                                        id = sId,
+                                        rollNo = sRoll,
+                                        studentName = sName,
+                                        parentPhone = sPhone,
+                                        status = "Present",
+                                        classId = sClassId
+                                    )
+                                )
+                            }
+                        }
+                        _sectionStudentRoster.value = remoteRoster + _sectionStudentRoster.value.filter { it.classId != classId }
+                        _rosterAttendance.value = remoteAttRoster + _rosterAttendance.value.filter { it.classId != classId }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchClassSubjectsFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/subjects")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val namesArr = json.getJSONObject("data").optJSONArray("subject_names")
+                        val list = mutableListOf<String>()
+                        if (namesArr != null) {
+                            for (i in 0 until namesArr.length()) {
+                                val s = namesArr.optString(i).trim()
+                                if (s.isNotEmpty()) list.add(s)
+                            }
+                        }
+                        _classSubjectsMap.value = _classSubjectsMap.value + (classId to list)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchClassExamsFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/exams")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val examsArr = json.getJSONObject("data").optJSONArray("exams")
+                        val remoteExams = mutableListOf<String>()
+                        if (examsArr != null) {
+                            for (i in 0 until examsArr.length()) {
+                                val eObj = examsArr.getJSONObject(i)
+                                val title = eObj.optString("title").trim()
+                                if (title.isNotEmpty() && remoteExams.none { it.equals(title, ignoreCase = true) }) {
+                                    remoteExams.add(title)
+                                }
+                            }
+                        }
+                        _availableExams.value = remoteExams
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchStudentExamResultsFromBackend(studentId: String, scope: CoroutineScope) {
+        fetchStudentExamResultsFromBackend(studentId, "", scope)
+    }
+
+    fun fetchStudentExamResultsFromBackend(
+        studentId: String,
+        examQueryName: String = "",
+        scope: CoroutineScope = ioScope
+    ) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val encodedExam = URLEncoder.encode(examQueryName, "UTF-8")
+                val urlStr = if (examQueryName.isNotBlank()) {
+                    "$BASE_URL/students/$studentId/exam-results?exam_name=$encodedExam&class_id=${selectedClass.value.id}"
+                } else {
+                    "$BASE_URL/students/$studentId/exam-results?class_id=${selectedClass.value.id}"
+                }
+                val url = URL(urlStr)
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val data = json.getJSONObject("data")
+                        val examName = data.optString("exam_name", examQueryName.ifBlank { "Term 1" })
+
+                        // Parse full results_by_exam map from PostgreSQL
+                        val byExamObj = data.optJSONObject("results_by_exam")
+                        val updatedByExam = mutableMapOf<String, List<SubjectExamResult>>()
+                        if (byExamObj != null) {
+                            val keys = byExamObj.keys()
+                            while (keys.hasNext()) {
+                                val eKey = keys.next()
+                                val arr = byExamObj.optJSONArray(eKey)
+                                val subList = mutableListOf<SubjectExamResult>()
+                                if (arr != null) {
+                                    for (i in 0 until arr.length()) {
+                                        val sObj = arr.getJSONObject(i)
+                                        subList.add(
+                                            SubjectExamResult(
+                                                subject = sObj.optString("subject_name"),
+                                                examName = eKey,
+                                                marksObtained = sObj.optDouble("marks_obtained", 0.0).toInt(),
+                                                maxMarks = sObj.optDouble("max_marks", 100.0).toInt().coerceAtLeast(1),
+                                                grade = sObj.optString("grade", ""),
+                                                teacherRemark = sObj.optString("remarks", "")
+                                            )
+                                        )
+                                    }
+                                }
+                                updatedByExam[eKey] = subList
+                            }
+                        }
+
+                        // Also parse the requested exam's subjects array (even if empty [])
+                        val subjectsArr = data.optJSONArray("subjects")
+                        val results = mutableListOf<SubjectExamResult>()
+                        if (subjectsArr != null) {
+                            for (i in 0 until subjectsArr.length()) {
+                                val sObj = subjectsArr.getJSONObject(i)
+                                results.add(
+                                    SubjectExamResult(
+                                        subject = sObj.optString("subject_name"),
+                                        examName = examName,
+                                        marksObtained = sObj.optDouble("marks_obtained", 0.0).toInt(),
+                                        maxMarks = sObj.optDouble("max_marks", 100.0).toInt().coerceAtLeast(1),
+                                        grade = sObj.optString("grade", ""),
+                                        teacherRemark = sObj.optString("remarks", "")
+                                    )
+                                )
+                            }
+                        }
+                        updatedByExam[examName] = results
+                        if (examQueryName.isNotBlank()) {
+                            updatedByExam[examQueryName] = results
+                        }
+                        _examResultsFlow.value = results
+                        _examResultsByExam.value = updatedByExam
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("GenesisAPI", "API Error on exam-results: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchStudentAttendanceFromBackend(studentId: String, scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/students/$studentId/attendance")
+                Log.i("GenesisAPI", "--> GET $url")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+                if (conn.responseCode == 200) {
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = JSONObject(jsonStr)
+                    if (json.optBoolean("success")) {
+                        val data = json.getJSONObject("data")
+                        val yearlyObj = data.optJSONObject("yearly_attendance")
+                        val updatedMap = mutableMapOf<String, String>()
+                        if (yearlyObj != null) {
+                            val keys = yearlyObj.keys()
+                            while (keys.hasNext()) {
+                                val dateKey = keys.next()
+                                val statusVal = yearlyObj.optString(dateKey, "Present")
+                                updatedMap[dateKey] = statusVal
+                            }
+                        }
+                        _studentYearlyAttendance.value = updatedMap
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("GenesisAPI", "API Error on attendance: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchReferralCodeFromBackend(scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/referrals/my-code")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=${selectedClass.value.id}]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+            } catch (e: Exception) {
+                Log.w("GenesisAPI", "API Error on referrals/my-code: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchSiblingsFromBackend(scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/admin/siblings")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=${selectedClass.value.id}]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+            } catch (e: Exception) {
+                Log.w("GenesisAPI", "API Error on admin/siblings: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchSchoolIntelligenceFromBackend(scope: CoroutineScope = ioScope) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/school-os/intelligence")
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=${selectedClass.value.id}]")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
+            } catch (e: Exception) {
+                Log.w("GenesisAPI", "API Error on school-os/intelligence: ${e.message}")
+            }
+        }
     }
 
     fun toggleNoteDownloaded(noteId: String) {
@@ -2468,8 +3250,9 @@ object DiscussionRepository {
         reason: String
     ) {
         val student = activeStudent.value
+        val tempId = "lv-${System.currentTimeMillis()}"
         val item = LeaveRequestItem(
-            id = "lv-${System.currentTimeMillis()}",
+            id = tempId,
             studentName = "${student.fullName} (${student.studentCode})",
             className = student.classTitle,
             leaveType = leaveType,
@@ -2479,11 +3262,68 @@ object DiscussionRepository {
             status = "Pending Review"
         )
         _leaveRequests.value = listOf(item) + _leaveRequests.value
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/leaves")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-student-name", student.fullName)
+                    setRequestProperty("x-student-id", student.id)
+                    setRequestProperty("x-class-id", student.classId)
+                }
+                val payload = JSONObject().apply {
+                    put("student_id", student.id)
+                    put("student_name", "${student.fullName} (${student.studentCode})")
+                    put("class_id", student.classId)
+                    put("class_name", student.classTitle)
+                    put("leave_type", leaveType)
+                    put("start_date", startDate)
+                    put("end_date", endDate)
+                    put("reason", reason)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                if (conn.responseCode in 200..299) {
+                    val realId = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        _leaveRequests.value = _leaveRequests.value.map {
+                            if (it.id == tempId) it.copy(id = realId) else it
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     fun updateLeaveStatus(leaveId: String, newStatus: String) {
         _leaveRequests.value = _leaveRequests.value.map {
             if (it.id == leaveId) it.copy(status = newStatus) else it
+        }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/leaves/$leaveId/status")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                }
+                val payload = JSONObject().apply {
+                    put("status", newStatus)
+                    put("reviewed_by", if (currentRole.value == AppRole.ADMIN) "School Principal" else "Class Teacher")
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -2514,6 +3354,33 @@ object DiscussionRepository {
             ?.putString("parent_email", email)
             ?.putString("address", address)
             ?.apply()
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/auth/student-profile")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PUT"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-student-name", updated.fullName)
+                }
+                val payload = JSONObject().apply {
+                    put("student_id", updated.id)
+                    put("student_code", updated.studentCode)
+                    put("roll_no", updated.rollNo)
+                    put("full_name", updated.fullName)
+                    put("class_name", updated.className)
+                    put("section", updated.section)
+                    put("parent_phone", phone)
+                    put("parent_email", email)
+                    put("address", address)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     fun toggleHomeworkCompleted(hwId: String) {
@@ -2534,9 +3401,39 @@ object DiscussionRepository {
             if (s.id == studentId) s.copy(status = status) else s
         }
         if (target != null) {
-            // Sync today's calendar entry when Roll #01 (or active student) is updated
-            if (studentId == "r1" || target.studentName.equals(activeStudent.value.fullName, ignoreCase = true)) {
-                val todayIso = java.time.LocalDate.of(2026, 11, 10).toString()
+            val todayIso = java.time.LocalDate.now().toString()
+            // Persist student roll call status directly to PostgreSQL attendance_records
+            ioScope.launch {
+                try {
+                    val url = URL("$BASE_URL/attendance")
+                    val conn = openSchoolHttpConnection(url).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 5000
+                        readTimeout = 5000
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("x-user-role", currentRole.value.name)
+                        setRequestProperty("x-class-id", target.classId)
+                    }
+                    val rec = JSONObject().apply {
+                        put("student_id", target.id)
+                        put("student_name", target.studentName)
+                        put("roll_no", target.rollNo)
+                        put("status", status.uppercase())
+                        put("remarks", "Marked by teacher in Class Roll Call")
+                    }
+                    val payload = JSONObject().apply {
+                        put("class_id", target.classId)
+                        put("date", todayIso)
+                        put("records", org.json.JSONArray().put(rec))
+                    }
+                    OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                    conn.responseCode
+                } catch (_: Exception) {}
+            }
+
+            // Sync today's calendar entry when active student is updated
+            if (studentId == activeStudent.value.id || target.studentName.equals(activeStudent.value.fullName, ignoreCase = true)) {
                 val calendarStatus = if (status == "Present") "Present" else "Absent"
                 _studentYearlyAttendance.value = _studentYearlyAttendance.value + (todayIso to calendarStatus)
             }
@@ -2575,6 +3472,7 @@ object DiscussionRepository {
 
     fun markAllPresentInClass(classId: String? = null) {
         val targetClassId = classId ?: selectedClass.value.id
+        val classStudents = _rosterAttendance.value.filter { it.classId == targetClassId }
         _rosterAttendance.value = _rosterAttendance.value.map {
             if (it.classId == targetClassId) it.copy(status = "Present") else it
         }
@@ -2587,13 +3485,49 @@ object DiscussionRepository {
                 triggeredActions = "Completed in 1 tap • Class attendance synced to SchoolOS Dashboard"
             )
         ) + _attendanceAuditLog.value
+
+        if (classStudents.isNotEmpty()) {
+            val todayIso = java.time.LocalDate.now().toString()
+            ioScope.launch {
+                try {
+                    val url = URL("$BASE_URL/attendance")
+                    val conn = openSchoolHttpConnection(url).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 5000
+                        readTimeout = 5000
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("x-user-role", currentRole.value.name)
+                        setRequestProperty("x-class-id", targetClassId)
+                    }
+                    val arr = org.json.JSONArray()
+                    classStudents.forEach { stu ->
+                        arr.put(JSONObject().apply {
+                            put("student_id", stu.id)
+                            put("student_name", stu.studentName)
+                            put("roll_no", stu.rollNo)
+                            put("status", "PRESENT")
+                            put("remarks", "1-tap Mark All Present")
+                        })
+                    }
+                    val payload = JSONObject().apply {
+                        put("class_id", targetClassId)
+                        put("date", todayIso)
+                        put("records", arr)
+                    }
+                    OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                    conn.responseCode
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun submitParentAbsenceExplanation(studentName: String, reason: String) {
         val cleanReason = reason.trim().ifBlank { "Medical / Family reason informed by parent" }
+        val tempId = "abs-${System.currentTimeMillis()}"
         _parentAbsenceExplanations.value = listOf(
             ParentAbsenceExplanation(
-                id = "abs-${System.currentTimeMillis()}",
+                id = tempId,
                 studentId = activeStudent.value.id,
                 studentName = studentName,
                 classSection = activeStudent.value.classTitle,
@@ -2602,11 +3536,60 @@ object DiscussionRepository {
                 status = "Submitted by Parent"
             )
         ) + _parentAbsenceExplanations.value.filter { it.studentName != studentName }
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/absence-explanations")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-student-name", studentName)
+                    setRequestProperty("x-student-id", activeStudent.value.id)
+                    setRequestProperty("x-class-id", activeStudent.value.classId)
+                }
+                val payload = JSONObject().apply {
+                    put("student_id", activeStudent.value.id)
+                    put("student_name", studentName)
+                    put("class_id", activeStudent.value.classId)
+                    put("class_section", activeStudent.value.classTitle)
+                    put("date_text", "Today")
+                    put("parent_explanation", cleanReason)
+                    put("status", "Submitted by Parent")
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                if (conn.responseCode in 200..299) {
+                    val realId = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        _parentAbsenceExplanations.value = _parentAbsenceExplanations.value.map {
+                            if (it.id == tempId) it.copy(id = realId) else it
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     fun approveAbsenceExplanation(explanationId: String) {
         _parentAbsenceExplanations.value = _parentAbsenceExplanations.value.map {
             if (it.id == explanationId) it.copy(status = "Approved by Teacher") else it
+        }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/absence-explanations/$explanationId/approve")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
+                }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -2654,7 +3637,7 @@ object DiscussionRepository {
         scope?.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes/$classId/verify-all")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -2719,7 +3702,7 @@ object DiscussionRepository {
         scope?.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/students/$studentId/verification")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "PATCH"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -2751,13 +3734,14 @@ object DiscussionRepository {
         maxMarks: Int = 10
     ): Int {
         val cleanTargets = if (targetClassIds.isEmpty()) listOf(selectedClass.value.id) else targetClassIds
+        val cleanDue = dueText.trim().ifBlank { "Due Tomorrow, 09:00 AM" }
         val createdItems = cleanTargets.map { cid ->
             HomeworkItem(
                 id = "hw-$cid-${System.currentTimeMillis()}",
                 classId = cid,
                 subject = subject,
                 title = title.trim(),
-                dueText = dueText.trim().ifBlank { "Due Tomorrow, 09:00 AM" },
+                dueText = cleanDue,
                 status = "Due Soon",
                 instructions = instructions.trim(),
                 maxMarks = maxMarks
@@ -2765,6 +3749,32 @@ object DiscussionRepository {
         }
         _homeworkList.value = createdItems + _homeworkList.value
         incrementAutomationRuleCounter("auto-hw-distribute")
+
+        ioScope.launch {
+            try {
+                val firstClass = cleanTargets.firstOrNull() ?: "class-10a"
+                val url = URL("$BASE_URL/classes/$firstClass/homework")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val classIdsArr = JSONArray()
+                cleanTargets.forEach { classIdsArr.put(it) }
+                val payload = JSONObject().apply {
+                    put("class_ids", classIdsArr)
+                    put("subject_name", subject)
+                    put("title", title.trim())
+                    put("description", instructions.trim())
+                    put("due_date", cleanDue)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return cleanTargets.size
     }
 
@@ -2784,6 +3794,29 @@ object DiscussionRepository {
             _homeworkList.value = updated
         } else {
             _homeworkList.value = listOf(item) + _homeworkList.value
+        }
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/classes/${item.classId}/homework")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("class_ids", JSONArray().put(item.classId))
+                    put("subject_name", item.subject)
+                    put("title", item.title)
+                    put("description", item.instructions)
+                    put("due_date", item.dueText)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -2830,7 +3863,7 @@ object DiscussionRepository {
         scope?.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/siblings/submit")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
                     connectTimeout = 3000
                     readTimeout = 3000
@@ -2915,6 +3948,28 @@ object DiscussionRepository {
             )
             _examResultsFlow.value = _examResultsFlow.value + newResult
         }
+
+        // Persist newly added class subject and default max marks to PostgreSQL via Go backend
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/subjects")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("class_id", classId)
+                    put("subject_name", cleanSubject)
+                    put("default_max_marks", maxMarks.coerceAtLeast(1))
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return true
     }
 
@@ -2928,6 +3983,21 @@ object DiscussionRepository {
             list.filterNot { it.subject.equals(subjectName, ignoreCase = true) }
         }
         _examResultsFlow.value = _examResultsFlow.value.filterNot { it.subject.equals(subjectName, ignoreCase = true) }
+
+        // Delete subject from PostgreSQL class_subjects via Go backend
+        ioScope.launch {
+            try {
+                val encodedSubject = URLEncoder.encode(subjectName.trim(), "UTF-8")
+                val url = URL("$BASE_URL/classes/$classId/subjects/$encodedSubject")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "DELETE"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return true
     }
 
@@ -2966,6 +4036,33 @@ object DiscussionRepository {
             listOf(newEntry) + _examResultsFlow.value
         }
         incrementAutomationRuleCounter("auto-marks-grade")
+
+        // Persist updated subject marks and max_marks to PostgreSQL via Go backend
+        val stu = activeStudent.value
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/classes/${stu.classId}/exam-marks")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("exam_name", examName)
+                    put("class_id", stu.classId)
+                    put("student_id", stu.id)
+                    put("student_name", stu.fullName)
+                    put("subject_name", subject)
+                    put("marks_obtained", safeObtained)
+                    put("max_marks", safeMax)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     /**
@@ -3055,6 +4152,44 @@ object DiscussionRepository {
 
         _studentExamSheets.value = currentSheets
         incrementAutomationRuleCounter("auto-marks-grade")
+
+        // Sync batch marks and subject maxMarks to PostgreSQL via Go backend
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/classes/$classId/exam-marks")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val recordsArr = JSONArray()
+                classRoster.forEach { stu ->
+                    val rawMark = marksByStudentId[stu.id] ?: return@forEach
+                    val safeObt = rawMark.coerceIn(0, safeMax)
+                    recordsArr.put(
+                        JSONObject().apply {
+                            put("student_id", stu.id)
+                            put("student_name", stu.fullName)
+                            put("subject_name", subject)
+                            put("marks_obtained", safeObt)
+                            put("max_marks", safeMax)
+                        }
+                    )
+                }
+                val payload = JSONObject().apply {
+                    put("exam_name", examName)
+                    put("class_id", classId)
+                    put("subject_name", subject)
+                    put("max_marks", safeMax)
+                    put("records", recordsArr)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return updatedCount
     }
 
@@ -3158,6 +4293,29 @@ object DiscussionRepository {
                 if (it.id == updatedActive.id) updatedActive else it
             }
         }
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/students/$studentId/class-section")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("full_name", cleanName)
+                    put("roll_no", rollNo.trim())
+                    put("class_name", cleanClass)
+                    put("section", cleanSec)
+                    put("parent_phone", parentPhone.trim())
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return true
     }
 
@@ -3196,6 +4354,31 @@ object DiscussionRepository {
             verifiedBy = "Added & Verified by Class Teacher"
         )
         _sectionStudentRoster.value = listOf(entry) + _sectionStudentRoster.value
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/auth/student-login")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 2500
+                    readTimeout = 2500
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", "TEACHER")
+                }
+                val payload = JSONObject().apply {
+                    put("student_id", entry.id)
+                    put("student_code", entry.studentCode)
+                    put("roll_no", entry.rollNo)
+                    put("full_name", entry.fullName)
+                    put("class_name", entry.className)
+                    put("section", entry.section)
+                    put("parent_phone", entry.parentPhone)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return entry
     }
 
@@ -3231,8 +4414,9 @@ object DiscussionRepository {
         targetLabel: String = "Total School",
         createdBy: String = "Teacher / Admin"
     ): SchoolHolidayItem {
+        val tempId = "hol-${System.currentTimeMillis()}"
         val item = SchoolHolidayItem(
-            id = "hol-${System.currentTimeMillis()}",
+            id = tempId,
             dateIso = dateIso,
             title = title.trim().ifBlank { "Declared Holiday" },
             scopeType = scopeType,
@@ -3242,11 +4426,56 @@ object DiscussionRepository {
             createdBy = createdBy
         )
         _schoolHolidays.value = (_schoolHolidays.value + item).sortedBy { it.dateIso }
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/holidays")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("title", item.title)
+                    put("date_iso", dateIso)
+                    put("scope_type", scopeType.name)
+                    put("target_class", targetClassName.ifBlank { "ALL" })
+                    put("target_section", targetClassId.ifBlank { "ALL" })
+                    put("description", targetLabel)
+                    put("created_by", createdBy)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                if (conn.responseCode in 200..299) {
+                    val realId = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        _schoolHolidays.value = _schoolHolidays.value.map {
+                            if (it.id == tempId) it.copy(id = realId) else it
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
         return item
     }
 
     fun removeSchoolHoliday(holidayId: String) {
         _schoolHolidays.value = _schoolHolidays.value.filterNot { it.id == holidayId }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/holidays/$holidayId")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "DELETE"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     // ========================================================================
@@ -3296,8 +4525,9 @@ object DiscussionRepository {
             "Mr. K. Kumar (Free in $periodSlot • 0 Subs Today)",
             "Pooja Ma'am (Free in $periodSlot)"
         )
+        val tempId = "sub-${System.currentTimeMillis()}"
         val item = TeacherSubstitutionItem(
-            id = "sub-${System.currentTimeMillis()}",
+            id = tempId,
             absentTeacherName = teacherName.trim().ifBlank { "Faculty Member" },
             leaveReason = leaveReason.trim().ifBlank { "Personal / Medical Leave" },
             periodSlot = periodSlot,
@@ -3309,6 +4539,38 @@ object DiscussionRepository {
         )
         _teacherSubstitutions.value = listOf(item) + _teacherSubstitutions.value
         incrementAutomationRuleCounter("auto-teacher-sub")
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/teacher/substitutions")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("absent_teacher_name", item.absentTeacherName)
+                    put("leave_reason", item.leaveReason)
+                    put("period_slot", item.periodSlot)
+                    put("class_section_name", item.classSectionName)
+                    put("subject", item.subject)
+                    put("suggested_substitutes", org.json.JSONArray(candidatePool))
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                if (conn.responseCode in 200..299) {
+                    val realId = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        _teacherSubstitutions.value = _teacherSubstitutions.value.map {
+                            if (it.id == tempId) it.copy(id = realId) else it
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
         return item
     }
 
@@ -3320,6 +4582,24 @@ object DiscussionRepository {
                     status = "Assigned & Notified"
                 )
             } else it
+        }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/teacher/substitutions/$subId/assign")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("assigned_substitute", chosenTeacher)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -3407,6 +4687,7 @@ object DiscussionRepository {
     ): String {
         val status = "Present"
         val time = nowTimeLabel()
+        val staffName = _staffDirectory.value.find { it.id == staffId }?.name ?: "Staff Member"
         upsertTodayAttendance(staffId) {
             it.copy(
                 checkIn = time,
@@ -3417,17 +4698,66 @@ object DiscussionRepository {
             )
         }
         setStaffDirectoryStatus(staffId, status)
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/attendance/check-in")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("staff_id", staffId)
+                    put("staff_name", staffName)
+                    put("date", java.time.LocalDate.now().toString())
+                    put("check_in", time)
+                    if (distanceMeters != null) put("distance_meters", distanceMeters)
+                    put("verification_method", verificationMethod)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
         return status
     }
 
     /** 1-tap staff Check Out at the end of the day. */
     fun staffCheckOut(staffId: String) {
         val time = nowTimeLabel()
+        val staffName = _staffDirectory.value.find { it.id == staffId }?.name ?: "Staff Member"
         upsertTodayAttendance(staffId) { it.copy(checkOut = time) }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/attendance/check-out")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("staff_id", staffId)
+                    put("staff_name", staffName)
+                    put("date", java.time.LocalDate.now().toString())
+                    put("check_out", time)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     /** Principal / Admin correction of a staff member's attendance for today. */
     fun adminMarkStaffAttendance(staffId: String, status: String) {
+        val staffName = _staffDirectory.value.find { it.id == staffId }?.name ?: "Staff Member"
         upsertTodayAttendance(staffId) { day ->
             when (status) {
                 "Present" -> day.copy(status = "Present", checkIn = day.checkIn ?: nowTimeLabel())
@@ -3435,15 +4765,60 @@ object DiscussionRepository {
             }
         }
         setStaffDirectoryStatus(staffId, status)
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/attendance")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("staff_id", staffId)
+                    put("staff_name", staffName)
+                    put("date", java.time.LocalDate.now().toString())
+                    put("status", status)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     fun updateStaffContactProfile(staffId: String, phone: String, email: String, qualification: String) {
+        val staffName = _staffDirectory.value.find { it.id == staffId }?.name ?: "Staff Member"
         _staffDirectory.value = _staffDirectory.value.map {
             if (it.id == staffId) it.copy(
                 phone = phone.trim().ifBlank { it.phone },
                 email = email.trim(),
                 qualification = qualification.trim().ifBlank { it.qualification }
             ) else it
+        }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/$staffId")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PUT"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("full_name", staffName)
+                    put("phone", phone.trim())
+                    put("email", email.trim())
+                    put("qualification", qualification.trim())
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -3457,8 +4832,9 @@ object DiscussionRepository {
         val staff = _staffDirectory.value.find { it.id == staffId }
         val safeDays = days.coerceIn(1, 30)
         val (from, to) = buildLeaveDateRange(startOffsetDays, safeDays)
+        val tempId = "slv-${System.currentTimeMillis()}"
         val request = StaffLeaveRequest(
-            id = "slv-${System.currentTimeMillis()}",
+            id = tempId,
             staffId = staffId,
             staffName = staff?.name ?: "Staff Member",
             leaveType = leaveType,
@@ -3470,11 +4846,57 @@ object DiscussionRepository {
             appliedOn = "Today"
         )
         _staffLeaveRequests.value = listOf(request) + _staffLeaveRequests.value
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/leaves")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", request.staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("staff_id", staffId)
+                    put("staff_name", request.staffName)
+                    put("leave_type", leaveType)
+                    put("from_date", from)
+                    put("to_date", to)
+                    put("days", safeDays)
+                    put("reason", request.reason)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                if (conn.responseCode in 200..299) {
+                    val realId = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        .optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        _staffLeaveRequests.value = _staffLeaveRequests.value.map {
+                            if (it.id == tempId) it.copy(id = realId) else it
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
         return request
     }
 
     fun cancelStaffLeave(leaveId: String) {
         _staffLeaveRequests.value = _staffLeaveRequests.value.filterNot { it.id == leaveId && it.status == "Pending" }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/leaves/$leaveId")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "DELETE"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
     }
 
     /**
@@ -3501,6 +4923,27 @@ object DiscussionRepository {
             if (it.id == leaveId) it.copy(status = "Approved", reviewedBy = reviewer, substituteRequested = isTeaching) else it
         }
 
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/leaves/$leaveId/status")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("status", "Approved")
+                    put("reviewed_by", reviewer)
+                    put("substitute_requested", isTeaching)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
+
         if (request.fromDate == todayLeaveDateLabel()) {
             adminMarkStaffAttendance(request.staffId, "On Leave")
         }
@@ -3509,6 +4952,26 @@ object DiscussionRepository {
     fun rejectStaffLeave(leaveId: String, reviewer: String = "Principal") {
         _staffLeaveRequests.value = _staffLeaveRequests.value.map {
             if (it.id == leaveId) it.copy(status = "Rejected", reviewedBy = reviewer) else it
+        }
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/leaves/$leaveId/status")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("status", "Rejected")
+                    put("reviewed_by", reviewer)
+                    put("substitute_requested", false)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
         }
     }
 
@@ -3633,9 +5096,15 @@ object DiscussionRepository {
         }
 
         val existing = _availableClasses.value.find { it.id == classId }
-        val schoolClass = existing ?: SchoolClass(classId, classTitle, seatCapacity)
+        val schoolClass = existing ?: SchoolClass(
+            id = classId,
+            name = classTitle,
+            studentCount = 0,
+            className = normalizedClassName,
+            section = cleanSec
+        )
         if (existing == null) {
-            _availableClasses.value = _availableClasses.value + schoolClass
+            rebuildClassOptionFlows(_availableClasses.value + schoolClass)
         }
 
         ensureIsolatedSectionData(classId, classTitle)
@@ -3643,10 +5112,10 @@ object DiscussionRepository {
         scope?.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 2500
-                    readTimeout = 2500
+                    connectTimeout = 4000
+                    readTimeout = 4000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("x-user-role", currentRole.value.name)
@@ -3658,11 +5127,111 @@ object DiscussionRepository {
                     put("seat_capacity", seatCapacity)
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-                conn.responseCode
+                if (conn.responseCode in 200..299) {
+                    fetchSchoolClassesFromBackend(scope)
+                }
             } catch (_: Exception) {}
         }
 
         return schoolClass
+    }
+
+    fun updateClassAndSection(
+        schoolClass: SchoolClass,
+        newClassNameInput: String,
+        newSectionInput: String,
+        scope: CoroutineScope,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val cleanNum = newClassNameInput.replace(Regex("(?i)^class\\s*"), "").trim()
+        val rawSec = newSectionInput.replace(Regex("(?i)^section\\s*"), "").trim()
+        val cleanSec = if (rawSec.length <= 2) rawSec.uppercase() else rawSec
+        val normalizedClassName = when {
+            cleanNum.isBlank() -> return
+            cleanNum.startsWith("NUR", true) || cleanNum.startsWith("LKG", true) || cleanNum.startsWith("UKG", true) -> cleanNum.uppercase()
+            else -> "Class ${cleanNum.uppercase()}"
+        }
+        val targetParam = schoolClass.dbUuid.ifBlank { schoolClass.id }
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$targetParam")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "PUT"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val payload = JSONObject().apply {
+                    put("class_name", normalizedClassName)
+                    put("section", cleanSec)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val msg = runCatching {
+                    val j = JSONObject(body)
+                    j.optString("message").ifBlank { j.optString("error") }
+                }.getOrDefault("")
+                if (code in 200..299) {
+                    fetchSchoolClassesFromBackend(scope)
+                    withContext(Dispatchers.Main) {
+                        onResult(true, msg.ifBlank { "Updated to $normalizedClassName – Section $cleanSec" })
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onResult(false, msg.ifBlank { "Update failed (HTTP $code)" })
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Network error: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun deleteClassAndSection(
+        schoolClass: SchoolClass,
+        scope: CoroutineScope,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val targetParam = schoolClass.dbUuid.ifBlank { schoolClass.id }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/classes/$targetParam")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "DELETE"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val msg = runCatching {
+                    val j = JSONObject(body)
+                    j.optString("message").ifBlank { j.optString("error") }
+                }.getOrDefault("")
+                if (code in 200..299) {
+                    fetchSchoolClassesFromBackend(scope)
+                    withContext(Dispatchers.Main) {
+                        onResult(true, msg.ifBlank { "Deleted ${schoolClass.name}" })
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onResult(false, msg.ifBlank { "Delete failed (HTTP $code)" })
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Network error: ${e.message}")
+                }
+            }
+        }
     }
 
     fun promoteStudentsToTargetClassSection(
@@ -3724,7 +5293,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes/$fromClassId/promote")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3787,7 +5356,7 @@ object DiscussionRepository {
         scope?.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes/$classId/selective-cleanup")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3834,7 +5403,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/discussions/$discussionId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "PUT"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3858,7 +5427,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/discussions/$discussionId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "DELETE"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3887,7 +5456,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/discussions/$discussionId/replies/$replyId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "PUT"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3921,7 +5490,7 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/discussions/$discussionId/replies/$replyId")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "DELETE"
                     connectTimeout = 2500
                     readTimeout = 2500
@@ -3935,54 +5504,54 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes/$classId/discussions?limit=20")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "GET"
                     connectTimeout = 2500
                     readTimeout = 2500
                     setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
                 }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
 
                 if (conn.responseCode == 200) {
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                    val jsonStr = reader.readText()
-                    reader.close()
-
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                     val json = JSONObject(jsonStr)
                     if (json.optBoolean("success")) {
-                        val discArray = json.getJSONObject("data").getJSONArray("discussions")
+                        val discArray = json.getJSONObject("data").optJSONArray("discussions")
                         val list = mutableListOf<DiscussionPost>()
-                        for (i in 0 until discArray.length()) {
-                            val item = discArray.getJSONObject(i)
-                            val id = item.optString("id")
-                            val imgUrl = item.optString("image_url", "").ifBlank { null }
-                            val existingPost = _discussions.value.find { it.id == id }
-                            list.add(
-                                DiscussionPost(
-                                    id = id,
-                                    classId = item.optString("class_id", classId),
-                                    authorName = item.optString("author_name", "Student"),
-                                    authorRole = item.optString("author_role", "STUDENT"),
-                                    subject = item.optString("subject_name", "Mathematics"),
-                                    title = item.optString("topic_title", ""),
-                                    content = item.optString("content", ""),
-                                    imageUri = imgUrl ?: existingPost?.imageUri,
-                                    hasEquationCard = i == 0 && imgUrl == null,
-                                    timeAgo = "Recent",
-                                    repliesCount = item.optInt("replies_count", 0),
-                                    replies = existingPost?.replies ?: emptyList()
+                        if (discArray != null) {
+                            for (i in 0 until discArray.length()) {
+                                val item = discArray.getJSONObject(i)
+                                val id = item.optString("id")
+                                val imgUrl = resolveRenderableMediaUrl(item.optString("image_url", "").ifBlank { null })
+                                val existingPost = _discussions.value.find { it.id == id }
+                                list.add(
+                                    DiscussionPost(
+                                        id = id,
+                                        classId = item.optString("class_id", classId),
+                                        authorName = item.optString("author_name", "Student"),
+                                        authorRole = item.optString("author_role", "STUDENT"),
+                                        subject = item.optString("subject_name", "Mathematics"),
+                                        title = item.optString("topic_title", ""),
+                                        content = item.optString("content", ""),
+                                        imageUri = imgUrl ?: existingPost?.imageUri,
+                                        hasEquationCard = false,
+                                        timeAgo = "Recent",
+                                        repliesCount = item.optInt("replies_count", 0),
+                                        replies = existingPost?.replies ?: emptyList()
+                                    )
                                 )
-                            )
-                        }
-                        if (list.isNotEmpty()) {
-                            withContext(Dispatchers.Main) {
-                                _discussions.value = list + _discussions.value.filter { it.classId != classId }
                             }
+                        }
+                        withContext(Dispatchers.Main) {
+                            _discussions.value = list + _discussions.value.filter { it.classId != classId }
                         }
                     }
                 }
-            } catch (_: Exception) {
-                // Keep rich local demo data when offline
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -3990,48 +5559,106 @@ object DiscussionRepository {
         scope.launch(Dispatchers.IO) {
             try {
                 val url = URL("$BASE_URL/classes/$classId/notes")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "GET"
                     connectTimeout = 2500
                     readTimeout = 2500
                     setRequestProperty("Accept", "application/json")
+                    setRequestProperty("x-student-name", activeStudent.value.fullName)
+                    setRequestProperty("x-class-id", classId)
+                    setRequestProperty("x-user-role", currentRole.value.name)
                 }
+                Log.i("GenesisAPI", "<-- ${conn.responseCode} GET $url")
 
                 if (conn.responseCode == 200) {
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                    val jsonStr = reader.readText()
-                    reader.close()
-
+                    val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                     val json = JSONObject(jsonStr)
                     if (json.optBoolean("success")) {
-                        val notesArray = json.getJSONObject("data").getJSONArray("notes")
+                        val notesArray = json.getJSONObject("data").optJSONArray("notes")
                         val list = mutableListOf<ClassNote>()
-                        for (i in 0 until notesArray.length()) {
-                            val item = notesArray.getJSONObject(i)
-                            list.add(
-                                ClassNote(
-                                    id = item.optString("id"),
-                                    classId = item.optString("class_id", classId),
-                                    subject = item.optString("subject_name", "Mathematics"),
-                                    title = item.optString("title", ""),
-                                    chapter = item.optString("chapter_name", ""),
-                                    fileUrl = item.optString("file_url", ""),
-                                    fileType = item.optString("file_type", "PDF"),
-                                    teacherName = item.optString("teacher_name", "Teacher"),
-                                    date = "Recent"
+                        if (notesArray != null) {
+                            for (i in 0 until notesArray.length()) {
+                                val item = notesArray.getJSONObject(i)
+                                list.add(
+                                    ClassNote(
+                                        id = item.optString("id"),
+                                        classId = item.optString("class_id", classId),
+                                        subject = item.optString("subject_name", "Mathematics"),
+                                        title = item.optString("title", ""),
+                                        chapter = item.optString("chapter_name", ""),
+                                        fileUrl = resolveRenderableMediaUrl(item.optString("file_url", "")) ?: "",
+                                        fileType = item.optString("file_type", "PDF"),
+                                        teacherName = item.optString("teacher_name", "Teacher"),
+                                        date = "Recent"
+                                    )
                                 )
-                            )
-                        }
-                        if (list.isNotEmpty()) {
-                            withContext(Dispatchers.Main) {
-                                _studyNotes.value = list + _studyNotes.value.filter { it.classId != classId }
                             }
+                        }
+                        withContext(Dispatchers.Main) {
+                            _studyNotes.value = list + _studyNotes.value.filter { it.classId != classId }
                         }
                     }
                 }
-            } catch (_: Exception) {
-                // Keep local section-isolated notes when offline
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun resolveRenderableMediaUrl(rawUrl: String?): String? {
+        if (rawUrl.isNullOrBlank()) return null
+        val gcsPrefix = "https://storage.googleapis.com/genesis-school-storage/"
+        if (rawUrl.startsWith(gcsPrefix)) {
+            val objectKey = rawUrl.removePrefix(gcsPrefix)
+            return "$BASE_URL/media/view?key=${java.net.URLEncoder.encode(objectKey, "UTF-8")}"
+        }
+        return rawUrl
+    }
+
+    private fun uploadLocalUriToCloudStorage(uriString: String?, folder: String, classId: String = selectedClass.value.id): String? {
+        if (uriString.isNullOrBlank()) return null
+        if (uriString.startsWith("http://") || uriString.startsWith("https://")) return resolveRenderableMediaUrl(uriString)
+        val ctx = appContext ?: return null
+        return try {
+            val parsedUri = android.net.Uri.parse(uriString)
+            val bytes = ctx.contentResolver.openInputStream(parsedUri)?.use { it.readBytes() } ?: return null
+            val mimeType = ctx.contentResolver.getType(parsedUri) ?: if (folder == "notes") "application/pdf" else "image/jpeg"
+            val ext = when {
+                mimeType.contains("pdf") -> "pdf"
+                mimeType.contains("png") -> "png"
+                else -> "jpg"
             }
+            val fileName = "${folder}_${System.currentTimeMillis()}.$ext"
+            val boundary = "----GenesisBoundary${System.currentTimeMillis()}"
+            val url = URL("$BASE_URL/media/upload")
+            val conn = openSchoolHttpConnection(url).apply {
+                requestMethod = "POST"
+                connectTimeout = 10000
+                readTimeout = 15000
+                doOutput = true
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                setRequestProperty("x-user-role", currentRole.value.name)
+                setRequestProperty("x-student-name", activeStudent.value.fullName)
+                setRequestProperty("x-student-id", activeStudent.value.id)
+                setRequestProperty("x-class-id", classId)
+            }
+            conn.outputStream.use { out ->
+                out.write("--$boundary\r\n".toByteArray())
+                out.write("Content-Disposition: form-data; name=\"folder\"\r\n\r\n$folder\r\n".toByteArray())
+                out.write("--$boundary\r\n".toByteArray())
+                out.write("Content-Disposition: form-data; name=\"class_id\"\r\n\r\n$classId\r\n".toByteArray())
+                out.write("--$boundary\r\n".toByteArray())
+                out.write("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n".toByteArray())
+                out.write("Content-Type: $mimeType\r\n\r\n".toByteArray())
+                out.write(bytes)
+                out.write("\r\n--$boundary--\r\n".toByteArray())
+                out.flush()
+            }
+            if (conn.responseCode in 200..299) {
+                val resp = conn.inputStream.bufferedReader().use { it.readText() }
+                JSONObject(resp).optJSONObject("data")?.optString("url")?.ifBlank { null }
+            } else null
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -4051,7 +5678,7 @@ object DiscussionRepository {
             subject = subject,
             title = title,
             chapter = if (pageCount > 0) "$chapter • $subject ($pageCount pg PDF)" else "$chapter • $subject",
-            fileUrl = "https://schoolapp.in/notes/${subject.lowercase()}.pdf",
+            fileUrl = "https://storage.googleapis.com/genesis-school-storage/notes/${subject.lowercase()}.pdf",
             fileType = "PDF",
             teacherName = teacherName,
             date = "Just now",
@@ -4062,20 +5689,24 @@ object DiscussionRepository {
 
         scope.launch(Dispatchers.IO) {
             try {
+                val uploadedUrl = uploadLocalUriToCloudStorage(localPdfUri, "notes", classId) ?: newNote.fileUrl
                 val url = URL("$BASE_URL/classes/$classId/notes")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 2500
-                    readTimeout = 2500
+                    connectTimeout = 5000
+                    readTimeout = 5000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", teacherName)
+                    setRequestProperty("x-class-id", classId)
                 }
                 val payload = JSONObject().apply {
                     put("subject_name", subject)
                     put("title", title)
                     put("chapter_name", chapter)
                     put("teacher_name", teacherName)
-                    put("file_url", newNote.fileUrl)
+                    put("file_url", uploadedUrl)
                     put("file_type", "PDF")
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
@@ -4089,39 +5720,76 @@ object DiscussionRepository {
         content: String,
         category: String = "CIRCULAR",
         author: String = "Principal's Office",
+        imageUri: String? = null,
+        targetAudience: String = "Entire School",
+        startsAtIso: String? = null,
+        expiresAtIso: String? = null,
         scope: CoroutineScope
     ) {
+        val computedStatus = runCatching {
+            val now = java.time.Instant.now()
+            val start = startsAtIso?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) }
+            val end = expiresAtIso?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) }
+            when {
+                start != null && start.isAfter(now) -> "SCHEDULED"
+                end != null && end.isBefore(now) -> "EXPIRED"
+                else -> "ACTIVE"
+            }
+        }.getOrDefault("ACTIVE")
+
+        val tempId = "notice-${System.currentTimeMillis()}"
         val newNotice = AdminNotice(
-            id = "notice-${System.currentTimeMillis()}",
+            id = tempId,
             title = title,
             content = content,
             category = category.uppercase(),
             author = author,
-            date = "Just now",
-            imageUrl = if (category.equals("EVENT", true))
-                "https://images.unsplash.com/photo-1523580494863-6f3031224c94?auto=format&fit=crop&q=80&w=800"
-            else null
+            date = if (computedStatus == "SCHEDULED") "Scheduled" else "Just now",
+            imageUrl = imageUri,
+            targetAudience = targetAudience,
+            startsAtIso = startsAtIso,
+            expiresAtIso = expiresAtIso,
+            scheduleStatus = computedStatus
         )
         _homeNotices.value = listOf(newNotice) + _homeNotices.value
 
         scope.launch(Dispatchers.IO) {
             try {
+                // Upload local camera/gallery image to private GCS bucket first so it persists in Cloud SQL
+                val uploadedImageUrl = uploadLocalUriToCloudStorage(imageUri, "notices", "all") ?: ""
+
                 val url = URL("$BASE_URL/posts")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 2500
-                    readTimeout = 2500
+                    connectTimeout = 8000
+                    readTimeout = 8000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-school-id", _activeSchool.value.id)
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", author)
+                }
+                val computedTargetType = when {
+                    targetAudience.equals("All School", ignoreCase = true) || targetAudience.equals("Entire School", ignoreCase = true) -> "ALL"
+                    targetAudience.contains("Section", ignoreCase = true) -> "SECTION"
+                    else -> "CLASS"
                 }
                 val payload = JSONObject().apply {
                     put("title", title)
                     put("content", content)
                     put("category", category.uppercase())
                     put("author_name", author)
+                    put("target_type", computedTargetType)
+                    put("target_audience", targetAudience)
+                    if (uploadedImageUrl.isNotBlank()) put("image_url", uploadedImageUrl)
+                    if (!startsAtIso.isNullOrBlank()) put("starts_at", startsAtIso)
+                    if (!expiresAtIso.isNullOrBlank()) put("expires_at", expiresAtIso)
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-                conn.responseCode
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    fetchNoticesFromBackend(scope)
+                }
             } catch (_: Exception) {}
         }
     }
@@ -4132,9 +5800,9 @@ object DiscussionRepository {
         content: String,
         hasImage: Boolean = false,
         imageUri: String? = null,
-        authorName: String = "Aarav Sharma",
-        authorRole: String = "STUDENT",
-        classId: String = "class-10a",
+        authorName: String = activeStudent.value.fullName,
+        authorRole: String = currentRole.value.name,
+        classId: String = selectedClass.value.id,
         scope: CoroutineScope
     ) {
         val tempId = "disc-${System.currentTimeMillis()}"
@@ -4158,14 +5826,19 @@ object DiscussionRepository {
 
         scope.launch(Dispatchers.IO) {
             try {
+                // Upload local content:// photo to Google Cloud Storage first so classmates & teachers can view it
+                val cloudImageUrl = uploadLocalUriToCloudStorage(imageUri, "doubts", classId)
                 val url = URL("$BASE_URL/classes/$classId/discussions")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 2500
-                    readTimeout = 2500
+                    connectTimeout = 5000
+                    readTimeout = 5000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("x-student-name", authorName)
+                    setRequestProperty("x-student-id", activeStudent.value.id)
+                    setRequestProperty("x-user-role", authorRole)
+                    setRequestProperty("x-class-id", classId)
                 }
                 val payload = JSONObject().apply {
                     put("subject_name", subject)
@@ -4173,12 +5846,24 @@ object DiscussionRepository {
                     put("content", content)
                     put("author_name", authorName)
                     put("author_role", authorRole)
-                    if (!imageUri.isNullOrBlank()) {
-                        put("image_url", imageUri)
+                    if (!cloudImageUrl.isNullOrBlank()) {
+                        put("image_url", cloudImageUrl)
                     }
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-                conn.responseCode
+                if (conn.responseCode in 200..299) {
+                    val resp = conn.inputStream.bufferedReader().use { it.readText() }
+                    val realId = JSONObject(resp).optJSONObject("data")?.optString("id").orEmpty()
+                    if (realId.isNotBlank()) {
+                        withContext(Dispatchers.Main) {
+                            _discussions.value = _discussions.value.map { post ->
+                                if (post.id == tempId) {
+                                    post.copy(id = realId, imageUri = cloudImageUrl ?: post.imageUri)
+                                } else post
+                            }
+                        }
+                    }
+                }
             } catch (_: Exception) {}
         }
     }
@@ -4187,14 +5872,15 @@ object DiscussionRepository {
         discussionId: String,
         content: String,
         imageUri: String? = null,
-        authorName: String = "Aarav Sharma",
-        authorRole: String = "STUDENT",
+        authorName: String = activeStudent.value.fullName,
+        authorRole: String = currentRole.value.name,
         scope: CoroutineScope
     ) {
         val isVerified = authorRole == "TEACHER"
         val cleanContent = content.ifBlank { "Attached solution photo" }
+        val tempReplyId = "rep-${System.currentTimeMillis()}"
         val newReply = DiscussionReply(
-            id = "rep-${System.currentTimeMillis()}",
+            id = tempReplyId,
             discussionId = discussionId,
             authorName = authorName,
             authorRole = authorRole,
@@ -4215,25 +5901,46 @@ object DiscussionRepository {
 
         scope.launch(Dispatchers.IO) {
             try {
+                val cloudImageUrl = uploadLocalUriToCloudStorage(imageUri, "replies")
                 val url = URL("$BASE_URL/discussions/$discussionId/replies")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 2500
-                    readTimeout = 2500
+                    connectTimeout = 5000
+                    readTimeout = 5000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("x-student-name", authorName)
+                    setRequestProperty("x-student-id", activeStudent.value.id)
+                    setRequestProperty("x-user-role", authorRole)
+                    setRequestProperty("x-class-id", selectedClass.value.id)
                 }
                 val payload = JSONObject().apply {
                     put("content", cleanContent)
                     put("author_name", authorName)
                     put("author_role", authorRole)
-                    if (!imageUri.isNullOrBlank()) {
-                        put("image_url", imageUri)
+                    if (!cloudImageUrl.isNullOrBlank()) {
+                        put("image_url", cloudImageUrl)
                     }
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-                conn.responseCode
+                if (conn.responseCode in 200..299) {
+                    val resp = conn.inputStream.bufferedReader().use { it.readText() }
+                    val realReplyId = JSONObject(resp).optJSONObject("data")?.optString("id").orEmpty()
+                    if (realReplyId.isNotBlank()) {
+                        withContext(Dispatchers.Main) {
+                            _discussions.value = _discussions.value.map { post ->
+                                if (post.id == discussionId) {
+                                    post.copy(
+                                        replies = post.replies.map { rep ->
+                                            if (rep.id == tempReplyId) rep.copy(id = realReplyId, imageUri = cloudImageUrl ?: rep.imageUri)
+                                            else rep
+                                        }
+                                    )
+                                } else post
+                            }
+                        }
+                    }
+                }
             } catch (_: Exception) {}
         }
     }

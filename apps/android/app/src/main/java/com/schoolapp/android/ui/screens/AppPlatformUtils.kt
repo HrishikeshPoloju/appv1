@@ -1684,32 +1684,35 @@ fun ClassSectionDropdownButton(
                     )
                 }
 
+                val activeRole by DiscussionRepository.currentRole.collectAsState()
                 if (allowClassManagement) {
                     HorizontalDivider(color = GenesisColors.Border, thickness = 0.5.dp)
-                    DropdownMenuItem(
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.AddCircleOutline,
-                                contentDescription = null,
-                                tint = GenesisColors.Primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = "➕ Create New Class or Section",
-                                color = GenesisColors.Primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        },
-                        onClick = {
-                            expanded = false
-                            newClassNameInput = "Class 10"
-                            newSectionInput = "A"
-                            showCreateClassDialog = true
-                        }
-                    )
+                    if (activeRole == com.schoolapp.android.data.AppRole.ADMIN) {
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.AddCircleOutline,
+                                    contentDescription = null,
+                                    tint = GenesisColors.Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = "➕ Create New Class or Section (Admin)",
+                                    color = GenesisColors.Primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            onClick = {
+                                expanded = false
+                                newClassNameInput = "Class 10"
+                                newSectionInput = "A"
+                                showCreateClassDialog = true
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         leadingIcon = {
                             Icon(

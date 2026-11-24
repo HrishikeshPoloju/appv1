@@ -1,16 +1,32 @@
 package com.schoolapp.android.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.schoolapp.android.R
+import com.schoolapp.android.ui.theme.GenesisColors
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 
 // ============================================================================
 // VECTOR LINE-ART & LEARNING ILLUSTRATIONS (Inspired by Reference Images 1, 2, 3)
@@ -395,5 +411,116 @@ fun ArchedMilestoneIllustration(
             size = Size(w * 0.44f, h * 0.10f),
             cornerRadius = CornerRadius(2.dp.toPx())
         )
+    }
+}
+
+/**
+ * 7. HEADER VECTOR BACKDROP
+ * Clean no-op so all headers across every app role stay crisp with zero decorative circles/bubbles.
+ */
+@Composable
+fun HeaderVectorBackdrop(
+    modifier: Modifier = Modifier,
+    accentColor: Color = Color.White
+) {
+    // Intentionally empty for a clean, distraction-free UI across all roles.
+}
+
+/**
+ * 8. CARD CORNER VECTOR ACCENT
+ * Clean no-op so all cards across every app role stay crisp with zero decorative circles/bubbles.
+ */
+@Composable
+fun CardCornerVectorAccent(
+    modifier: Modifier = Modifier,
+    tint: Color = Color(0xFF2563EB)
+) {
+    // Intentionally empty for a clean, distraction-free UI across all roles.
+}
+
+enum class EmptyStateIllustrationType {
+    DOUBTS, NOTES, NOTICES, ACHIEVEMENTS, HOMEWORK
+}
+
+/**
+ * 9. ILLUSTRATED EMPTY STATE CARD
+ * Uses the user's real illustrations from /assets (asset_doubts, asset_notes, asset_myclass,
+ * asset_homeworks, asset_results) cleanly framed with zero crude stick-figure drawings.
+ */
+@Composable
+fun EmptyStateIllustrationCard(
+    title: String,
+    subtitle: String,
+    illustrationType: EmptyStateIllustrationType,
+    drawableRes: Int? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val brand = LocalSchoolBrand.current
+    val resolvedRes = drawableRes ?: when (illustrationType) {
+        EmptyStateIllustrationType.DOUBTS -> R.drawable.asset_doubts
+        EmptyStateIllustrationType.NOTES -> R.drawable.asset_notes
+        EmptyStateIllustrationType.NOTICES -> R.drawable.asset_myclass
+        EmptyStateIllustrationType.ACHIEVEMENTS -> R.drawable.asset_results
+        EmptyStateIllustrationType.HOMEWORK -> R.drawable.asset_homeworks
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(resolvedRes),
+                contentDescription = title,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = GenesisColors.TextPrimary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = GenesisColors.TextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 19.sp
+            )
+            if (actionLabel != null && onAction != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = brand.primary),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(44.dp)
+                ) {
+                    Text(
+                        text = actionLabel,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
     }
 }

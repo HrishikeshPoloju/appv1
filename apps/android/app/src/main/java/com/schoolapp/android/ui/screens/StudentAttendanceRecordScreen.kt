@@ -36,15 +36,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.schoolapp.android.R
+import com.schoolapp.android.data.DiscussionRepository
 import com.schoolapp.android.data.StudentProfile
+import com.schoolapp.android.ui.theme.GenesisColors
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 import java.time.DayOfWeek
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
 // ============================================================================
-// EXACT FIGMA ATTENDANCE SCREEN IMPLEMENTATION (Node 3:142)
-// Built with 7 modular, production-grade reusable components without static screenshot backgrounds
+// ATTENDANCE RECORD SCREEN — CLEAN WHITE/LIGHT THEME MATCHING ALL OTHER PAGES
 // ============================================================================
 
 @Composable
@@ -53,111 +55,136 @@ fun StudentAttendanceRecordScreen(
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
+    val brand = LocalSchoolBrand.current
 
-    // Academic Year Months: June 2026 to November 2026
-    val months = remember {
-        listOf(
-            YearMonth.of(2026, 6) to "Jun '26",
-            YearMonth.of(2026, 7) to "Jul '26",
-            YearMonth.of(2026, 8) to "Aug '26",
-            YearMonth.of(2026, 9) to "Sep '26",
-            YearMonth.of(2026, 10) to "Oct '26",
-            YearMonth.of(2026, 11) to "Nov '26"
-        )
+    // Always fetch live attendance from backend API when screen opens
+    LaunchedEffect(student.id) {
+        DiscussionRepository.fetchStudentAttendanceFromBackend(student.id)
     }
-    var selectedMonthIndex by remember { mutableIntStateOf(5) } // Default: Nov '26
+
+    // Dynamic 6-month window ending on the current month
+    val months = remember {
+        val nowYm = YearMonth.now()
+        (5 downTo 0).map { offset ->
+            val ym = nowYm.minusMonths(offset.toLong())
+            val shortMonth = ym.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+            val shortYear = (ym.year % 100).toString().padStart(2, '0')
+            ym to "$shortMonth '$shortYear"
+        }
+    }
+    var selectedMonthIndex by remember { mutableIntStateOf(months.lastIndex) }
     val currentYearMonth = months[selectedMonthIndex].first
+    val yearlyAttendance by DiscussionRepository.studentYearlyAttendance.collectAsState()
+    val totalDaysCount = yearlyAttendance.size
+    val presentDaysCount = yearlyAttendance.values.count { it.equals("Present", ignoreCase = true) }
+    val absentDaysCount = yearlyAttendance.values.count { it.equals("Absent", ignoreCase = true) }
+    val attendancePctText = if (totalDaysCount > 0) "%.1f%%".format((presentDaysCount * 100.0) / totalDaysCount) else "0.0%"
+    val attendanceStatusLabel = when {
+        totalDaysCount == 0 -> "No Records"
+        (presentDaysCount * 100.0 / totalDaysCount) >= 90.0 -> "Regular"
+        (presentDaysCount * 100.0 / totalDaysCount) >= 75.0 -> "Good"
+        else -> "Low"
+    }
+
     var selectedDay by remember { mutableStateOf<Int?>(10) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF111111)) // Obsidian Dark background
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp)
+            .background(GenesisColors.Background)
     ) {
-        // 1. AttendanceHeader Component
-        AttendanceHeader(
-            studentName = student.fullName,
-            studentClass = "${student.className} – Section ${student.section}",
-            onBack = onBack
-        )
+        // Branded Top Bar matching all other screens
+        SubScreenTopBar(title = "Attendance Record", onBack = onBack)
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 2. AttendanceSummaryCard Component (Native UI with Student Illustration Asset)
-        AttendanceSummaryCard(
-            percentage = "94.0%",
-            label = "Overall Attendance",
-            status = "Regular"
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 3. AttendanceStatCard Row Component
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 32.dp)
         ) {
-            AttendanceStatCard(
-                count = "134",
-                label = "Total Days",
-                valueColor = Color(0xFFFBBF24),
-                icon = Icons.Default.CalendarMonth,
-                modifier = Modifier.weight(1f)
+            // Student subtitle strip
+            Text(
+                text = "${student.fullName} • ${student.className} – Section ${student.section}",
+                fontSize = 13.sp,
+                color = GenesisColors.TextSecondary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
             )
-            AttendanceStatCard(
-                count = "126",
-                label = "Present",
-                valueColor = Color.White,
-                icon = Icons.Default.Star,
-                modifier = Modifier.weight(1f)
+
+            // 2. AttendanceSummaryCard Component (Live from PostgreSQL DB)
+            AttendanceSummaryCard(
+                percentage = attendancePctText,
+                label = "Overall Attendance",
+                status = attendanceStatusLabel
             )
-            AttendanceStatCard(
-                count = "8",
-                label = "Absent",
-                valueColor = Color(0xFFE25C38),
-                icon = Icons.Default.NotificationsOff,
-                modifier = Modifier.weight(1f)
-            )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-        // 4. MonthSelector Component
-        MonthSelector(
-            months = months.map { it.second },
-            selectedIndex = selectedMonthIndex,
-            onMonthSelected = { selectedMonthIndex = it }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 5. AttendanceCalendar Component
-        AttendanceCalendar(
-            yearMonth = currentYearMonth,
-            selectedDay = selectedDay,
-            onDaySelected = { selectedDay = it },
-            onPrevMonth = {
-                if (selectedMonthIndex > 0) selectedMonthIndex--
-            },
-            onNextMonth = {
-                if (selectedMonthIndex < months.lastIndex) selectedMonthIndex++
+            // 3. AttendanceStatCard Row Component (Live from PostgreSQL DB)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                AttendanceStatCard(
+                    count = totalDaysCount.toString(),
+                    label = "Total Days",
+                    valueColor = brand.primary,
+                    icon = Icons.Default.CalendarMonth,
+                    modifier = Modifier.weight(1f)
+                )
+                AttendanceStatCard(
+                    count = presentDaysCount.toString(),
+                    label = "Present",
+                    valueColor = GenesisColors.Success,
+                    icon = Icons.Default.Star,
+                    modifier = Modifier.weight(1f)
+                )
+                AttendanceStatCard(
+                    count = absentDaysCount.toString(),
+                    label = "Absent",
+                    valueColor = GenesisColors.Emergency,
+                    icon = Icons.Default.NotificationsOff,
+                    modifier = Modifier.weight(1f)
+                )
             }
-        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // 7. AttendanceLegend Component
-        AttendanceLegend()
+            // 4. MonthSelector Component
+            MonthSelector(
+                months = months.map { it.second },
+                selectedIndex = selectedMonthIndex,
+                onMonthSelected = { selectedMonthIndex = it }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. AttendanceCalendar Component (strictly driven by live API response)
+            AttendanceCalendar(
+                yearMonth = currentYearMonth,
+                yearlyAttendance = yearlyAttendance,
+                selectedDay = selectedDay,
+                onDaySelected = { selectedDay = it },
+                onPrevMonth = {
+                    if (selectedMonthIndex > 0) selectedMonthIndex--
+                },
+                onNextMonth = {
+                    if (selectedMonthIndex < months.lastIndex) selectedMonthIndex++
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 7. AttendanceLegend Component
+            AttendanceLegend()
+        }
     }
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 1: AttendanceHeader
+// COMPONENT 1: AttendanceHeader (Light Theme)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceHeader(
@@ -172,19 +199,19 @@ fun AttendanceHeader(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Circular Back Button Pod
         Box(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF262626))
+                .background(Color.White)
+                .border(1.dp, GenesisColors.Border, CircleShape)
                 .clickable { onBack() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.ChevronLeft,
                 contentDescription = "Back",
-                tint = Color.White,
+                tint = GenesisColors.TextPrimary,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -196,14 +223,14 @@ fun AttendanceHeader(
                 text = "Attendance Record",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = GenesisColors.TextPrimary,
                 letterSpacing = 0.3.sp
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "$studentName • $studentClass",
                 fontSize = 13.sp,
-                color = Color(0xFFA3A3A3),
+                color = GenesisColors.TextSecondary,
                 fontWeight = FontWeight.Normal
             )
         }
@@ -211,7 +238,7 @@ fun AttendanceHeader(
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 2: AttendanceSummaryCard (Native UI, Exact Figma Colors & Sizes)
+// COMPONENT 2: AttendanceSummaryCard (Branded Gradient Card on Light Page)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceSummaryCard(
@@ -220,21 +247,29 @@ fun AttendanceSummaryCard(
     status: String,
     modifier: Modifier = Modifier
 ) {
+    val brand = LocalSchoolBrand.current
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(134.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3E2B00)),
-        border = BorderStroke(1.dp, Color(0xFF523903))
+            .height(138.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF3E2B00))
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(brand.headerStart, brand.headerEnd)
+                    )
+                )
         ) {
-            // Student Reading Illustration with Sparkles, Dots & Arrow (Figma Node 3:246/3:253)
+            HeaderVectorBackdrop(
+                accentColor = Color.White,
+                modifier = Modifier.matchParentSize()
+            )
             Image(
                 painter = painterResource(id = R.drawable.img_attendance_student),
                 contentDescription = "Student Learning",
@@ -245,7 +280,19 @@ fun AttendanceSummaryCard(
                     .align(Alignment.CenterEnd)
             )
 
-            // Content Column (Left: 94.0%, Overall Attendance, Regular)
+            // Seamless brand-blue patch covering the baked-in "gular" outline behind the Regular pill
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0.0f to brand.headerStart,
+                            0.58f to brand.headerStart,
+                            0.68f to Color.Transparent
+                        )
+                    )
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -256,34 +303,32 @@ fun AttendanceSummaryCard(
                 Text(
                     text = percentage,
                     fontSize = 44.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFF3C439),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
                     letterSpacing = (-0.5).sp
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = label,
                         fontSize = 14.sp,
-                        color = Color(0xFFC7B69E),
-                        fontWeight = FontWeight.Normal
+                        color = brand.skyAccent,
+                        fontWeight = FontWeight.Medium
                     )
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
-                        color = Color(0xFF221D17),
+                        color = Color.White.copy(alpha = 0.18f),
                         shape = RoundedCornerShape(999.dp)
                     ) {
                         Text(
                             text = status,
-                            color = Color(0xFF9E968D),
+                            color = Color.White,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
@@ -294,7 +339,7 @@ fun AttendanceSummaryCard(
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 3: AttendanceStatCard
+// COMPONENT 3: AttendanceStatCard (Crisp White Card)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceStatCard(
@@ -306,8 +351,10 @@ fun AttendanceStatCard(
 ) {
     Card(
         modifier = modifier.height(90.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF222222))
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
     ) {
         Column(
             modifier = Modifier
@@ -323,7 +370,7 @@ fun AttendanceStatCard(
                 Text(
                     text = count,
                     fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = valueColor
                 )
                 Icon(
@@ -337,15 +384,15 @@ fun AttendanceStatCard(
             Text(
                 text = label,
                 fontSize = 12.sp,
-                color = Color(0xFFCBD5E1),
-                fontWeight = FontWeight.Medium
+                color = GenesisColors.TextSecondary,
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 4: MonthSelector
+// COMPONENT 4: MonthSelector (Light Theme Pills)
 // ----------------------------------------------------------------------------
 @Composable
 fun MonthSelector(
@@ -354,6 +401,7 @@ fun MonthSelector(
     onMonthSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val brand = LocalSchoolBrand.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -364,15 +412,17 @@ fun MonthSelector(
         months.forEachIndexed { index, label ->
             val isSelected = index == selectedIndex
             Surface(
-                color = if (isSelected) Color(0xFFFDC52A) else Color(0xFF1E1E1E),
+                color = if (isSelected) brand.primary else Color.White,
                 shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, if (isSelected) brand.primary else GenesisColors.Border),
+                shadowElevation = if (isSelected) 2.dp else 0.dp,
                 modifier = Modifier.clickable { onMonthSelected(index) }
             ) {
                 Text(
                     text = label,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isSelected) Color(0xFF111111) else Color(0xFFCBD5E1),
+                    color = if (isSelected) Color.White else GenesisColors.TextPrimary,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
@@ -381,27 +431,28 @@ fun MonthSelector(
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 5: AttendanceCalendar
+// COMPONENT 5: AttendanceCalendar (Clean White Card)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceCalendar(
     yearMonth: YearMonth,
+    yearlyAttendance: Map<String, String>,
     selectedDay: Int?,
     onDaySelected: (Int) -> Unit,
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val presentDays = remember { setOf(2, 3, 4, 5, 6, 7, 9, 10) }
-    val absentDays = remember { setOf(8) }
-    val offDays = remember { setOf(1, 14, 15, 21, 22, 28, 29) }
+    val brand = LocalSchoolBrand.current
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF222222))
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -415,19 +466,18 @@ fun AttendanceCalendar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Arrow Button
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFFFDC52A))
+                            .background(brand.softTint)
                             .clickable { onPrevMonth() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronLeft,
                             contentDescription = "Previous Month",
-                            tint = Color(0xFF111111),
+                            tint = brand.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -436,22 +486,21 @@ fun AttendanceCalendar(
                         text = "${yearMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${yearMonth.year}",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = GenesisColors.TextPrimary
                     )
 
-                    // Right Arrow Button
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFFFDC52A))
+                            .background(brand.softTint)
                             .clickable { onNextMonth() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = "Next Month",
-                            tint = Color(0xFF111111),
+                            tint = brand.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -471,9 +520,9 @@ fun AttendanceCalendar(
                         ) {
                             Text(
                                 text = dayLabel,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextSecondary
                             )
                         }
                     }
@@ -499,11 +548,13 @@ fun AttendanceCalendar(
                             val dayNum = cellIndex - dayOffset + 1
 
                             if (dayNum in 1..daysInMonth) {
+                                val isoDate = yearMonth.atDay(dayNum).toString()
+                                val apiStatus = yearlyAttendance[isoDate]
                                 AttendanceDateCell(
                                     dayNumber = dayNum,
-                                    isPresent = presentDays.contains(dayNum),
-                                    isAbsent = absentDays.contains(dayNum),
-                                    isOff = offDays.contains(dayNum),
+                                    isPresent = apiStatus.equals("Present", ignoreCase = true),
+                                    isAbsent = apiStatus.equals("Absent", ignoreCase = true),
+                                    isOff = false,
                                     isSelected = selectedDay == dayNum,
                                     onClick = { onDaySelected(dayNum) }
                                 )
@@ -517,12 +568,12 @@ fun AttendanceCalendar(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            // Science Beaker Flask Illustration (Figma Node 3:150)
+            // Science Beaker Flask Illustration
             Image(
                 painter = painterResource(id = R.drawable.ic_attendance_beaker),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .align(Alignment.BottomEnd)
                     .padding(end = 10.dp, bottom = 14.dp)
             )
@@ -531,7 +582,7 @@ fun AttendanceCalendar(
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 6: AttendanceDateCell (Canvas Sketched Hand-Drawn Indicators)
+// COMPONENT 6: AttendanceDateCell (High-Contrast Light Theme Cells)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceDateCell(
@@ -551,112 +602,81 @@ fun AttendanceDateCell(
     ) {
         when {
             isPresent -> {
-                // Hand-drawn sketch circle effect with golden yellow fill
-                Canvas(modifier = Modifier.size(34.dp)) {
-                    val radius = size.minDimension / 2f
-                    val center = Offset(size.width / 2f, size.height / 2f)
-
-                    // Warm golden yellow fill
-                    drawCircle(
-                        color = Color(0xFFFDC52A),
-                        radius = radius * 0.95f,
-                        center = center
-                    )
-
-                    // Hand-drawn sketch outer ring 1
-                    drawCircle(
-                        color = Color(0xFFEAB308),
-                        radius = radius * 0.96f,
-                        center = center,
-                        style = Stroke(
-                            width = 1.2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(24f, 6f, 18f, 4f))
-                        )
-                    )
-
-                    // Hand-drawn sketch outer ring 2
-                    drawCircle(
-                        color = Color(0xFFCA8A04),
-                        radius = radius * 0.90f,
-                        center = center,
-                        style = Stroke(
-                            width = 1.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(16f, 8f))
-                        )
-                    )
-                }
-                Text(
-                    text = "$dayNumber",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111111) // Crisp black
-                )
-            }
-
-            isAbsent -> {
-                // Outlined orange sketch ring
-                Canvas(modifier = Modifier.size(34.dp)) {
-                    val radius = size.minDimension / 2f
-                    val center = Offset(size.width / 2f, size.height / 2f)
-
-                    drawCircle(
-                        color = Color(0xFFF97316),
-                        radius = radius * 0.94f,
-                        center = center,
-                        style = Stroke(width = 1.8.dp.toPx())
-                    )
-
-                    drawCircle(
-                        color = Color(0xFFFB923C).copy(alpha = 0.5f),
-                        radius = radius * 0.88f,
-                        center = center,
-                        style = Stroke(
-                            width = 1.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 6f))
-                        )
-                    )
-                }
-                Text(
-                    text = "$dayNumber",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFF97316)
-                )
-            }
-
-            isOff -> {
-                // Dark grey off-day circle pod
                 Box(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF282828)),
+                        .background(Color(0xFFDCFCE7))
+                        .border(1.5.dp, GenesisColors.Success, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "$dayNumber",
-                        fontSize = 14.sp,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF15803D)
+                    )
+                }
+            }
+
+            isAbsent -> {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFEE2E2))
+                        .border(1.5.dp, GenesisColors.Emergency, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$dayNumber",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.Emergency
+                    )
+                }
+            }
+
+            isOff -> {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF1F5F9)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$dayNumber",
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Normal,
-                        color = Color(0xFF737373)
+                        color = Color(0xFF94A3B8)
                     )
                 }
             }
 
             else -> {
-                // Normal scheduled weekday text
-                Text(
-                    text = "$dayNumber",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.White
-                )
+                // No API record for this day — keep clean white cell
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$dayNumber",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = GenesisColors.TextPrimary
+                    )
+                }
             }
         }
     }
 }
 
 // ----------------------------------------------------------------------------
-// COMPONENT 7: AttendanceLegend
+// COMPONENT 7: AttendanceLegend (Light Theme)
 // ----------------------------------------------------------------------------
 @Composable
 fun AttendanceLegend(
@@ -672,10 +692,10 @@ fun AttendanceLegend(
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFFDC52A))
+                .background(GenesisColors.Success)
         )
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Present", fontSize = 12.sp, color = Color.White)
+        Text("Present", fontSize = 12.sp, color = GenesisColors.TextPrimary, fontWeight = FontWeight.Medium)
 
         Spacer(modifier = Modifier.width(18.dp))
 
@@ -683,10 +703,11 @@ fun AttendanceLegend(
         Box(
             modifier = Modifier
                 .size(10.dp)
-                .border(1.5.dp, Color(0xFFF97316), CircleShape)
+                .clip(CircleShape)
+                .background(GenesisColors.Emergency)
         )
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Absent", fontSize = 12.sp, color = Color.White)
+        Text("Absent", fontSize = 12.sp, color = GenesisColors.TextPrimary, fontWeight = FontWeight.Medium)
 
         Spacer(modifier = Modifier.width(18.dp))
 
@@ -694,9 +715,11 @@ fun AttendanceLegend(
         Box(
             modifier = Modifier
                 .size(10.dp)
-                .border(1.5.dp, Color(0xFF525252), CircleShape)
+                .clip(CircleShape)
+                .background(Color(0xFFE2E8F0))
+                .border(1.dp, Color(0xFF94A3B8), CircleShape)
         )
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Off / Upcoming", fontSize = 12.sp, color = Color(0xFFA3A3A3))
+        Text("Off / Upcoming", fontSize = 12.sp, color = GenesisColors.TextSecondary, fontWeight = FontWeight.Medium)
     }
 }

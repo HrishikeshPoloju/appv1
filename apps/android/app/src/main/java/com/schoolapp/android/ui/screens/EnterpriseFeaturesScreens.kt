@@ -27,10 +27,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import com.schoolapp.android.R
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -938,8 +941,14 @@ fun ExamResultsReportCardScreen(
     val studentExamSheets by DiscussionRepository.studentExamSheets.collectAsState()
     val availableExams by DiscussionRepository.availableExamsFlow.collectAsState()
 
-    var selectedExam by remember { mutableStateOf("Half-Yearly Exam") }
+    var selectedExam by remember(availableExams) {
+        mutableStateOf(availableExams.firstOrNull() ?: "Term 1")
+    }
     var examMenuExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedExam, student.id) {
+        DiscussionRepository.fetchStudentExamResultsFromBackend(student.id, selectedExam)
+    }
 
     val isStaff = currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN
     val isExamApproved = remember(studentExamSheets, student.id, selectedExam) {
@@ -953,27 +962,12 @@ fun ExamResultsReportCardScreen(
     val activeClassSubjects = classSubjectsMap[targetClassId]
         ?: DiscussionRepository.getSubjectsForClass(targetClassId)
 
-    val examRawResults = resultsByExam[selectedExam].orEmpty()
-    // Filter results to the subjects configured for this class & section
-    val results = remember(examRawResults, activeClassSubjects, selectedExam) {
-        val defaultMax = if (selectedExam.startsWith("Unit Test")) 25 else 100
-        val defaultObt = if (selectedExam.startsWith("Unit Test")) 22 else 88
-        activeClassSubjects.map { subName ->
-            examRawResults.find { it.subject.equals(subName, ignoreCase = true) }
-                ?: SubjectExamResult(
-                    subject = subName,
-                    examName = selectedExam,
-                    marksObtained = defaultObt,
-                    maxMarks = defaultMax,
-                    grade = "",
-                    teacherRemark = ""
-                )
-        }
-    }
+    // Strictly use ONLY the exam marks returned from the PostgreSQL database for this student & exam
+    val results = resultsByExam[selectedExam].orEmpty()
 
     val totalObtained = results.sumOf { it.marksObtained }
-    val totalMax = results.sumOf { it.maxMarks }.coerceAtLeast(1)
-    val percentage = (totalObtained * 100.0) / totalMax
+    val totalMax = results.sumOf { it.maxMarks }
+    val percentage = if (totalMax > 0) (totalObtained * 100.0) / totalMax else 0.0
 
     var showEnterMarksDialog by remember { mutableStateOf(false) }
     var showManageSubjectsDialog by remember { mutableStateOf(false) }
@@ -1178,65 +1172,37 @@ fun ExamResultsReportCardScreen(
         }
     }
 
+    val brand = LocalSchoolBrand.current
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1626))
+            .background(GenesisColors.Background)
     ) {
-        // Figma Header (Circular Back Pod + Exam Results + Subtitle)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1E293B))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ChevronLeft,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Column {
-                Text(
-                    text = "Exam Results",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    letterSpacing = 0.3.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${student.fullName} • $targetClassTitle",
-                    fontSize = 13.sp,
-                    color = Color(0xFF94A3B8),
-                    fontWeight = FontWeight.Normal
-                )
-            }
-        }
+        // Branded Top Bar matching all other pages
+        SubScreenTopBar(title = "Exam Results", onBack = onBack)
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
-            // Exam Selector Dropdown (Figma Node 9:74)
+            item {
+                Text(
+                    text = "${student.fullName} • $targetClassTitle",
+                    fontSize = 13.sp,
+                    color = GenesisColors.TextSecondary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+            }
+
+            // Exam Selector Dropdown (Clean White Surface)
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
                     Surface(
-                        color = Color(0xFF131B2E),
+                        color = Color.White,
                         shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0xFF263554)),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        shadowElevation = 1.5.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { examMenuExpanded = true }
@@ -1252,7 +1218,7 @@ fun ExamResultsReportCardScreen(
                                 Text(
                                     text = "Selected Exam",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF8E9EB5),
+                                    color = GenesisColors.TextSecondary,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
@@ -1260,13 +1226,13 @@ fun ExamResultsReportCardScreen(
                                     text = selectedExam,
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = GenesisColors.TextPrimary
                                 )
                             }
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Select Exam",
-                                tint = Color(0xFF93C5FD),
+                                tint = brand.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1275,7 +1241,7 @@ fun ExamResultsReportCardScreen(
                     DropdownMenu(
                         expanded = examMenuExpanded,
                         onDismissRequest = { examMenuExpanded = false },
-                        modifier = Modifier.background(Color(0xFF1E293B))
+                        modifier = Modifier.background(Color.White)
                     ) {
                         availableExams.forEach { examTitle ->
                             DropdownMenuItem(
@@ -1283,12 +1249,12 @@ fun ExamResultsReportCardScreen(
                                     Text(
                                         text = examTitle,
                                         fontWeight = if (examTitle == selectedExam) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (examTitle == selectedExam) Color(0xFF60A5FA) else Color.White
+                                        color = if (examTitle == selectedExam) brand.primary else GenesisColors.TextPrimary
                                     )
                                 },
                                 trailingIcon = {
                                     if (examTitle == selectedExam) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF60A5FA), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = brand.primary, modifier = Modifier.size(18.dp))
                                     }
                                 },
                                 onClick = {
@@ -1305,9 +1271,10 @@ fun ExamResultsReportCardScreen(
             if (!isStaff && !isExamApproved) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, Color(0xFF263554)),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -1319,38 +1286,57 @@ fun ExamResultsReportCardScreen(
                             Box(
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .background(Color(0xFF332A15), CircleShape),
+                                    .background(Color(0xFFFEF3C7), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(28.dp))
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
                                 text = "Results Awaiting Approval",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
-                                color = Color.White
+                                color = GenesisColors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "$selectedExam marks are being verified and will appear automatically once approved by your Class Teacher.",
                                 fontSize = 13.sp,
-                                color = Color(0xFF94A3B8),
+                                color = GenesisColors.TextSecondary,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
             } else {
-                // Hero Performance Card (Figma Node 9:60)
+                // Hero Performance Card with user's results.jpg asset background
                 item {
+                    val brand = LocalSchoolBrand.current
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2D56)),
+                        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                         shape = RoundedCornerShape(22.dp),
-                        border = BorderStroke(1.dp, Color(0xFF1E4C82)),
+                        border = BorderStroke(1.dp, brand.borderTint.copy(alpha = 0.45f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(brand.headerStart, brand.headerEnd)
+                                    )
+                                )
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.asset_results),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .alpha(0.18f)
+                            )
+                            Column(modifier = Modifier.padding(20.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1459,6 +1445,7 @@ fun ExamResultsReportCardScreen(
                                 }
                             }
                         }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -1472,17 +1459,17 @@ fun ExamResultsReportCardScreen(
                             text = "Subject-Wise Marks",
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
-                            color = Color.White
+                            color = GenesisColors.TextPrimary
                         )
                         Surface(
-                            color = Color(0xFF1E293B),
+                            color = brand.softTint,
                             shape = RoundedCornerShape(999.dp)
                         ) {
                             Text(
                                 text = if (isStaff) "Tap to Edit" else "${results.size} Subjects",
                                 fontSize = 12.sp,
-                                color = Color(0xFF94A3B8),
-                                fontWeight = FontWeight.Medium,
+                                color = brand.primary,
+                                fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -1490,13 +1477,24 @@ fun ExamResultsReportCardScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
+                if (results.isEmpty()) {
+                    item {
+                        EmptyStateIllustrationCard(
+                            title = "No Exam Marks Published Yet",
+                            subtitle = "No marks have been entered for ${student.fullName} in $selectedExam yet. They will appear here automatically once published.",
+                            illustrationType = EmptyStateIllustrationType.ACHIEVEMENTS,
+                            drawableRes = R.drawable.asset_results
+                        )
+                    }
+                }
+
                 items(results, key = { it.subject }) { item ->
                     val subPercent = (item.marksObtained * 100) / item.maxMarks.coerceAtLeast(1)
                     val badgeColor = when {
-                        subPercent >= 90 -> Color(0xFFF59E0B) // Amber
-                        subPercent >= 80 -> Color(0xFF10B981) // Emerald
-                        subPercent >= 70 -> Color(0xFF3B82F6) // Blue
-                        else -> Color(0xFF94A3B8)
+                        subPercent >= 90 -> Color(0xFFD97706) // Amber
+                        subPercent >= 80 -> Color(0xFF16A34A) // Emerald
+                        subPercent >= 70 -> Color(0xFF2563EB) // Blue
+                        else -> Color(0xFF64748B)
                     }
                     val iconRes = when {
                         item.subject.contains("telugu", ignoreCase = true) -> R.drawable.ic_sub_telugu
@@ -1512,9 +1510,10 @@ fun ExamResultsReportCardScreen(
                     }
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0xFF263554)),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 5.dp)
@@ -1535,7 +1534,7 @@ fun ExamResultsReportCardScreen(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFF1E293B)),
+                                        .background(brand.softTint),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Image(
@@ -1553,21 +1552,21 @@ fun ExamResultsReportCardScreen(
                                         text = item.subject,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
-                                        color = Color.White
+                                        color = GenesisColors.TextPrimary
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = "${item.marksObtained} / ${item.maxMarks}",
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 13.sp,
-                                        color = Color(0xFF94A3B8)
+                                        color = GenesisColors.TextSecondary
                                     )
                                 }
 
                                 // Percentage Pill Badge
                                 Surface(
-                                    color = badgeColor.copy(alpha = 0.18f),
-                                    border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)),
+                                    color = badgeColor.copy(alpha = 0.14f),
+                                    border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.4f)),
                                     shape = RoundedCornerShape(999.dp)
                                 ) {
                                     Text(
@@ -1590,7 +1589,7 @@ fun ExamResultsReportCardScreen(
                                     .height(6.dp)
                                     .clip(RoundedCornerShape(999.dp)),
                                 color = badgeColor,
-                                trackColor = Color(0xFF1E293B)
+                                trackColor = Color(0xFFE2E8F0)
                             )
                         }
                     }
@@ -1926,23 +1925,14 @@ fun AssignmentsAndProjectsScreen(onBack: () -> Unit) {
             // Items List
             if (filteredList.isEmpty()) {
                 item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, GenesisColors.Border),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(Icons.Default.AssignmentLate, contentDescription = null, tint = GenesisColors.TextSecondary, modifier = Modifier.size(40.dp))
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text("No $selectedTab Scheduled", fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("No pending items for this class. Everything is up-to-date!", color = GenesisColors.TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        }
-                    }
+                    EmptyStateIllustrationCard(
+                        title = "No $selectedTab Scheduled",
+                        subtitle = "No pending items for this class. Everything is up-to-date!",
+                        illustrationType = EmptyStateIllustrationType.HOMEWORK,
+                        drawableRes = R.drawable.asset_homeworks,
+                        actionLabel = if (isTeacherOrAdmin) "Add New Assignment" else null,
+                        onAction = if (isTeacherOrAdmin) ({ showAddDialog = true }) else null
+                    )
                 }
             } else {
                 items(filteredList, key = { it.id }) { item ->
@@ -4220,9 +4210,10 @@ fun PrincipalExecutiveCommandCard(
 ) {
     val context = LocalContext.current
     Card(
-        colors = CardDefaults.cardColors(containerColor = GenesisColors.MeteorBlack),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
+        colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -4233,60 +4224,131 @@ fun PrincipalExecutiveCommandCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "PRINCIPAL & MANAGEMENT COMMAND CENTER",
-                        color = GenesisColors.SkyAccent,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "PRINCIPAL & MANAGEMENT",
+                        color = GenesisColors.Teal,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Live Campus Operations & Revenue",
-                        color = Color.White,
-                        fontSize = 16.sp,
+                        color = GenesisColors.TextPrimary,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Icon(Icons.Default.Insights, contentDescription = null, tint = GenesisColors.SkyAccent)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(GenesisColors.LightBlue, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Insights,
+                        contentDescription = null,
+                        tint = GenesisColors.Primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    color = GenesisColors.MeteorSurface,
+                    color = GenesisColors.Background,
                     shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, GenesisColors.Border),
                     modifier = Modifier
                         .weight(1f)
                         .clickable { onOpenRollCall() }
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Campus Attendance", color = Color(0xFF94A3B8), fontSize = 11.sp)
-                        Text("94.6%", color = Color(0xFF4ADE80), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("512 / 541 Present Today", color = Color.White, fontSize = 10.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.HowToReg,
+                                contentDescription = null,
+                                tint = GenesisColors.Success,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Campus Attendance",
+                                color = GenesisColors.TextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "94.6%",
+                            color = GenesisColors.Success,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "512 / 541 Present Today",
+                            color = GenesisColors.TextSecondary,
+                            fontSize = 11.sp
+                        )
                     }
                 }
                 Surface(
-                    color = GenesisColors.MeteorSurface,
+                    color = GenesisColors.Background,
                     shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, GenesisColors.Border),
                     modifier = Modifier
                         .weight(1f)
                         .clickable { onOpenFeeReview() }
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Term Fee Collected", color = Color(0xFF94A3B8), fontSize = 11.sp)
-                        Text("₹18.45 L", color = GenesisColors.SkyAccent, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("₹3.2L Due • Tap to Remind", color = Color.White, fontSize = 10.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = GenesisColors.Primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Term Fee Collected",
+                                color = GenesisColors.TextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "₹18.45 L",
+                            color = GenesisColors.TextPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "₹3.2L Due • Tap to Remind",
+                            color = GenesisColors.Teal,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            OutlinedButton(
+            Button(
                 onClick = {
                     Toast.makeText(
                         context,
@@ -4296,14 +4358,23 @@ fun PrincipalExecutiveCommandCard(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, GenesisColors.SkyAccent),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = GenesisColors.SkyAccent)
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
             ) {
-                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("1-Tap Send Automated Fee Due Alert", color = GenesisColors.SkyAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Rounded.NotificationsActive,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Send Automated Fee Due Alert",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -4990,285 +5061,524 @@ fun MistakeAnalysisScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Hero Explanation Card
+            // Shadcn-style Header Overview Card
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                    shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, GenesisColors.Border),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(Color(0xFFFEE2E2), CircleShape),
-                            contentAlignment = Alignment.Center
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.FindInPage, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(26.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(GenesisColors.LightBlue, RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.FindInPage,
+                                    contentDescription = null,
+                                    tint = GenesisColors.Primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "AI DIAGNOSTICS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GenesisColors.Teal,
+                                    letterSpacing = 0.8.sp
+                                )
+                                Text(
+                                    text = "Test Paper Mistake Analysis",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = GenesisColors.TextPrimary
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("AI Test Paper Mistake Analysis", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = GenesisColors.TextPrimary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text("Upload your evaluated test paper. AI pinpoints what went wrong and explains step-by-step how to correct it without lengthy text.", fontSize = 12.sp, color = GenesisColors.TextSecondary, lineHeight = 16.sp)
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Upload your evaluated answer sheet to pinpoint what went wrong and get a clear step-by-step fix.",
+                            fontSize = 13.sp,
+                            color = GenesisColors.TextSecondary,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        // Compact 3-Step Indicator Bar
+                        Surface(
+                            color = GenesisColors.Background,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, GenesisColors.Border),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf("1. Subject", "2. Sheet Photo", "3. AI Fix").forEachIndexed { idx, step ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(
+                                                    if (idx == 0) GenesisColors.Primary
+                                                    else if (idx == 1) GenesisColors.Teal
+                                                    else GenesisColors.Success,
+                                                    CircleShape
+                                                )
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = step,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = GenesisColors.TextPrimary
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Step 1: Select Subject & Exam
+            // Unified Shadcn-style Layered Form Card (Step 1 + Divider + Step 2)
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                    shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, GenesisColors.Border),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("1. Select Subject & Assessment:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            subjects.forEach { subj ->
-                                val sel = selectedSubject == subj
-                                FilterChip(
-                                    selected = sel,
-                                    onClick = { selectedSubject = subj },
-                                    label = { Text(subj, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = GenesisColors.Primary,
-                                        selectedLabelColor = Color.White,
-                                        containerColor = Color(0xFFF8FAFC),
-                                        labelColor = GenesisColors.TextSecondary
-                                    )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // LAYER 1: Subject & Assessment
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(GenesisColors.LightBlue, RoundedCornerShape(6.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("1", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Primary)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Subject & Assessment",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GenesisColors.TextPrimary
                                 )
                             }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                subjects.forEach { subj ->
+                                    val sel = selectedSubject == subj
+                                    Surface(
+                                        color = if (sel) GenesisColors.Primary else GenesisColors.Background,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (sel) GenesisColors.Primary else GenesisColors.Border
+                                        ),
+                                        modifier = Modifier.clickable { selectedSubject = subj }
+                                    ) {
+                                        Text(
+                                            text = subj,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                                            color = if (sel) Color.White else GenesisColors.TextPrimary,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Assessment / Exam Name",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = GenesisColors.TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = examName,
+                                onValueChange = { examName = it },
+                                placeholder = { Text("e.g. Half-Yearly Exam", color = GenesisColors.TextSecondary, fontSize = 13.sp) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GenesisColors.Primary,
+                                    unfocusedBorderColor = GenesisColors.Border,
+                                    focusedContainerColor = GenesisColors.Surface,
+                                    unfocusedContainerColor = GenesisColors.Background
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = examName,
-                            onValueChange = { examName = it },
-                            label = { Text("Assessment / Exam Name") },
-                            modifier = Modifier.fillMaxWidth()
+                        HorizontalDivider(color = GenesisColors.Border, thickness = 1.dp)
+
+                        // LAYER 2: Upload Answer Sheet Dropzone & Action
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(Color(0xFFCCFBF1), RoundedCornerShape(6.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("2", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.Teal)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Answer Sheet Photo",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GenesisColors.TextPrimary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Shadcn Upload Dropzone Well
+                            Surface(
+                                color = GenesisColors.Background,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    if (selectedImageUri != null || capturedBitmap != null) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                capturedBitmap?.let { bmp ->
+                                                    Image(
+                                                        bitmap = bmp.asImageBitmap(),
+                                                        contentDescription = null,
+                                                        modifier = Modifier
+                                                            .size(48.dp)
+                                                            .clip(RoundedCornerShape(8.dp)),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                } ?: Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .background(Color(0xFFDCFCE7), RoundedCornerShape(8.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Rounded.Image, contentDescription = null, tint = GenesisColors.Success, modifier = Modifier.size(22.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Column {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = GenesisColors.Success, modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text("Sheet Attached", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
+                                                    }
+                                                    Text("Ready for AI mistake analysis", fontSize = 11.sp, color = GenesisColors.TextSecondary)
+                                                }
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    selectedImageUri = null
+                                                    capturedBitmap = null
+                                                }
+                                            ) {
+                                                Icon(Icons.Rounded.Close, contentDescription = "Remove", tint = GenesisColors.Emergency, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .background(GenesisColors.Surface, RoundedCornerShape(10.dp))
+                                                .border(1.dp, GenesisColors.Border, RoundedCornerShape(10.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Rounded.UploadFile, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(20.dp))
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "Snap or pick your evaluated test sheet",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = GenesisColors.TextPrimary
+                                        )
+                                        Text(
+                                            text = "Clear photo of the question & your written answer",
+                                            fontSize = 11.sp,
+                                            color = GenesisColors.TextSecondary
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { cameraLauncher.launch() },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, GenesisColors.Border),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = GenesisColors.Surface,
+                                                contentColor = GenesisColors.TextPrimary
+                                            )
+                                        ) {
+                                            Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Camera", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { galleryLauncher.launch("image/*") },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, GenesisColors.Border),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = GenesisColors.Surface,
+                                                contentColor = GenesisColors.TextPrimary
+                                            )
+                                        ) {
+                                            Icon(Icons.Rounded.PhotoLibrary, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Gallery", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Question / Remark (Optional)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = GenesisColors.TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = questionNote,
+                                onValueChange = { questionNote = it },
+                                placeholder = { Text("e.g. Q14 lost 3 marks on sign error", color = GenesisColors.TextSecondary, fontSize = 13.sp) },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GenesisColors.Primary,
+                                    unfocusedBorderColor = GenesisColors.Border,
+                                    focusedContainerColor = GenesisColors.Surface,
+                                    unfocusedContainerColor = GenesisColors.Background
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Button(
+                                onClick = { analyzeMistakeWithAI() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                            ) {
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Analyze Mistake with AI", fontWeight = FontWeight.SemiBold, color = Color.White, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Section Header: Common Pitfalls
+            val subjectMistakes = mistakeList.filter { it.subject.equals(selectedSubject, ignoreCase = true) }
+            val displayMistakes = if (subjectMistakes.isNotEmpty()) subjectMistakes else mistakeList
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Common Pitfalls in $selectedSubject",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = GenesisColors.TextPrimary
+                    )
+                    Surface(
+                        color = GenesisColors.LightBlue,
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text(
+                            text = "${displayMistakes.size} topics",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GenesisColors.Primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                 }
             }
 
-            // Step 2: Upload Test Paper Image
-            item {
+            items(displayMistakes, key = { it.id }) { mistake ->
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                    shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, GenesisColors.Border),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("2. Upload Test Paper / Answer Sheet Photo:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { cameraLauncher.launch() },
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                shape = RoundedCornerShape(10.dp)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Surface(
+                                    color = Color(0xFFFEE2E2),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "Pitfall • ${mistake.questionNumber}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = GenesisColors.Emergency,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                                Text(mistake.examName, fontSize = 11.sp, color = GenesisColors.TextSecondary, fontWeight = FontWeight.Medium)
                             }
 
-                            OutlinedButton(
-                                onClick = { galleryLauncher.launch("image/*") },
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Gallery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = mistake.mistakeTitle,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextPrimary
+                            )
 
-                        // Preview attached test sheet
-                        if (selectedImageUri != null || capturedBitmap != null) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Callout 1: What went wrong
                             Surface(
-                                color = Color(0xFFF1F5F9),
+                                color = Color(0xFFFEF2F2),
                                 shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                border = BorderStroke(1.dp, Color(0xFFFECACA)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        capturedBitmap?.let { bmp ->
-                                            Image(
-                                                bitmap = bmp.asImageBitmap(),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        } ?: Icon(Icons.Default.Image, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(36.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text("Test Paper Sheet Attached", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
-                                            Text("Ready for AI mistake detection", fontSize = 11.sp, color = GenesisColors.TextSecondary)
-                                        }
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = GenesisColors.Emergency, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("What went wrong", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.Emergency)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(mistake.whatWasWrong, fontSize = 12.sp, color = GenesisColors.TextPrimary, lineHeight = 17.sp)
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            selectedImageUri = null
-                                            capturedBitmap = null
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Callout 2: How to correct
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Rounded.CheckCircleOutline, contentDescription = null, tint = GenesisColors.Success, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("How to correct simply", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.Success)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(mistake.howToCorrect, fontSize = 12.sp, color = GenesisColors.TextPrimary, lineHeight = 17.sp)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Callout 3: Quick Example
+                            Surface(
+                                color = GenesisColors.Background,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, GenesisColors.Border),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Rounded.Lightbulb, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("Real-world example", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.Teal)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(mistake.realWorldExample, fontSize = 12.sp, color = GenesisColors.TextSecondary, lineHeight = 17.sp)
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = questionNote,
-                            onValueChange = { questionNote = it },
-                            placeholder = { Text("Optional: Specify question or remark (e.g. Q14 lost 3 marks)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
-                        )
+                        HorizontalDivider(color = GenesisColors.Border, thickness = 1.dp)
 
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Button(
-                            onClick = { analyzeMistakeWithAI() },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
-                        ) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Analyze Mistake with AI", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                        }
-                    }
-                }
-            }
-
-            // Frequently Misunderstood Topics (CBSE Assessment Insights)
-            item {
-                Text(
-                    text = "Frequently Misunderstood Topics in $selectedSubject",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = GenesisColors.TextPrimary
-                )
-            }
-
-            val subjectMistakes = mistakeList.filter { it.subject.equals(selectedSubject, ignoreCase = true) }
-            val displayMistakes = if (subjectMistakes.isNotEmpty()) subjectMistakes else mistakeList
-
-            items(displayMistakes, key = { it.id }) { mistake ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                color = Color(0xFFFEE2E2),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "Common Pitfall: ${mistake.questionNumber}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFDC2626),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                            Text(mistake.examName, fontSize = 11.sp, color = GenesisColors.TextSecondary)
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = mistake.mistakeTitle,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GenesisColors.TextPrimary
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            color = Color(0xFFFFF1F2),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("❌ What went wrong:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9F1239))
-                                Text(mistake.whatWasWrong, fontSize = 12.sp, color = Color(0xFF881337), lineHeight = 17.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            color = Color(0xFFF0FDF4),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("✅ How to correct simply:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
-                                Text(mistake.howToCorrect, fontSize = 12.sp, color = Color(0xFF14532D), lineHeight = 17.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            color = Color(0xFFFEF3C7),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("💡 Quick Real-World Example:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
-                                Text(mistake.realWorldExample, fontSize = 12.sp, color = Color(0xFF78350F), lineHeight = 17.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            Button(
-                                onClick = {
-                                    analyzeMistakeWithAI(mistake.mistakeTitle)
-                                },
+                            OutlinedButton(
+                                onClick = { analyzeMistakeWithAI(mistake.mistakeTitle) },
                                 shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, GenesisColors.Primary),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = GenesisColors.Primary)
                             ) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Ask AI Explanation", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Explain with AI", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.Primary)
                             }
                         }
                     }

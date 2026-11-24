@@ -1,4 +1,6 @@
 # Built and Generated Outputs
+backend-go/server
+backend-go/*.log
 build/
 */build/
 */*/build/
@@ -62,6 +64,11 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 *.pem
+*.key
+*credentials*.json
+project-*.json
+service-account*.json
+gcp*.json
 
 # OS generated files
 .DS_Store

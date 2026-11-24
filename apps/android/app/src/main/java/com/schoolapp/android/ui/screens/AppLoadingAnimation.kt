@@ -31,11 +31,14 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.schoolapp.android.data.DiscussionRepository
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -48,8 +51,18 @@ import kotlin.math.sin
 fun AppSplashScreen(
     onLoadingComplete: () -> Unit
 ) {
+    val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+    val brandPrimary = remember(activeSchool.primaryColorHex) {
+        runCatching { Color(android.graphics.Color.parseColor(activeSchool.primaryColorHex)) }
+            .getOrDefault(Color(0xFF1E40AF))
+    }
+    val brandAccent = remember(activeSchool.accentColorHex) {
+        runCatching { Color(android.graphics.Color.parseColor(activeSchool.accentColorHex)) }
+            .getOrDefault(Color(0xFF38BDF8))
+    }
+
     val progressAnim = remember { Animatable(0f) }
-    var statusText by remember { mutableStateOf("Initializing Digital Campus...") }
+    var statusText by remember(activeSchool.name) { mutableStateOf("Initializing ${activeSchool.name}...") }
 
     // Infinite transitions for ambient floating & rotating effects
     val infiniteTransition = rememberInfiniteTransition(label = "SplashInfinite")
@@ -105,7 +118,7 @@ fun AppSplashScreen(
             targetValue = 1f,
             animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
         )
-        statusText = "Welcome to Genesis Campus!"
+        statusText = "Welcome to ${activeSchool.name}!"
         delay(250)
         onLoadingComplete()
     }
@@ -116,10 +129,10 @@ fun AppSplashScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A), // Dark slate
-                        Color(0xFF1E3A8A), // Deep Royal Blue
-                        Color(0xFF1E40AF), // Genesis Royal Blue
-                        Color(0xFF0F172A)  // Night Navy
+                        Color(0xFF0B1120),
+                        brandPrimary.copy(alpha = 0.88f),
+                        brandPrimary,
+                        Color(0xFF0B1120)
                     )
                 )
             ),
@@ -135,11 +148,11 @@ fun AppSplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // 2. School Digital Campus Header Pill
+            // 2. Dynamic School Digital Campus Header Pill
             Surface(
-                color = Color.White.copy(alpha = 0.12f),
+                color = Color.White.copy(alpha = 0.14f),
                 shape = RoundedCornerShape(999.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, brandAccent.copy(alpha = 0.45f))
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -148,12 +161,12 @@ fun AppSplashScreen(
                     Icon(
                         imageVector = Icons.Default.School,
                         contentDescription = "School Logo",
-                        tint = Color(0xFF67E8F9), // Bright Cyan
+                        tint = brandAccent,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "GENESIS SMART CAMPUS",
+                        text = "${activeSchool.schoolCode.uppercase()} SMART CAMPUS",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -164,23 +177,23 @@ fun AppSplashScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // 3. Central Hero Animated Vector Mascot & Learning Universe
+            // 3. Central Hero Animated School Emblem / Learning Universe
             Box(
                 modifier = Modifier
                     .size(240.dp)
                     .offset(y = floatOffset.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Background radial glow
+                // Background radial glow tinted dynamically to the school's accent color
                 Box(
                     modifier = Modifier
-                        .size(180.dp)
+                        .size(185.dp)
                         .scale(pulseScale)
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
-                                    Color(0xFF38BDF8).copy(alpha = 0.35f),
-                                    Color(0xFF6366F1).copy(alpha = 0.15f),
+                                    brandAccent.copy(alpha = 0.42f),
+                                    brandPrimary.copy(alpha = 0.20f),
                                     Color.Transparent
                                 )
                             ),
@@ -194,40 +207,58 @@ fun AppSplashScreen(
                     pulseScale = pulseScale,
                     progress = progressAnim.value
                 )
+
+                // If the school uploaded a custom logo in DB/GCS, display it cleanly centered in a glowing crest
+                if (activeSchool.logoUrl.isNotBlank()) {
+                    Surface(
+                        color = Color.White,
+                        shape = CircleShape,
+                        border = androidx.compose.foundation.BorderStroke(3.dp, brandAccent),
+                        modifier = Modifier.size(92.dp)
+                    ) {
+                        AsyncImage(
+                            model = DiscussionRepository.resolveRenderableMediaUrl(activeSchool.logoUrl),
+                            contentDescription = activeSchool.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 4. App Title & Subtitle with Crisp Contrast
+            // 4. Dynamic School Title & Tagline (zero Play Store update needed for new schools)
             Text(
-                text = "GENESIS SCHOOL",
-                fontSize = 24.sp,
+                text = activeSchool.name.uppercase(),
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White,
-                letterSpacing = 1.5.sp
+                letterSpacing = 1.2.sp,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Autonomous Learning & Student Companion",
+                text = activeSchool.tagline,
                 fontSize = 13.sp,
-                color = Color(0xFF93C5FD), // Soft blue
-                fontWeight = FontWeight.Medium
+                color = brandAccent.copy(alpha = 0.95f),
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // 5. Sleek Neon Shimmer Loading Bar
+            // 5. Sleek School-Branded Shimmer Loading Bar
             Column(
                 modifier = Modifier.fillMaxWidth(0.85f),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Progress Bar Container
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(10.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(Color.White.copy(alpha = 0.16f))
                 ) {
                     Box(
                         modifier = Modifier
@@ -237,9 +268,9 @@ fun AppSplashScreen(
                             .background(
                                 Brush.horizontalGradient(
                                     colors = listOf(
-                                        Color(0xFF06B6D4), // Cyan
-                                        Color(0xFF3B82F6), // Blue
-                                        Color(0xFF10B981)  // Vibrant Emerald
+                                        brandAccent,
+                                        Color.White.copy(alpha = 0.9f),
+                                        brandAccent
                                     )
                                 )
                             )

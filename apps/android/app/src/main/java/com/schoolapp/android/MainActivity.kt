@@ -1,24 +1,30 @@
 package com.schoolapp.android
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.schoolapp.android.notifications.NotificationTopicManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.DynamicForm
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -51,6 +57,7 @@ import com.schoolapp.android.ui.screens.MyClassScreen
 import com.schoolapp.android.ui.screens.StudentFirstTimeLoginScreen
 import com.schoolapp.android.ui.screens.TeacherMarksAutomationScreen
 import com.schoolapp.android.ui.theme.GenesisColors
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 import com.schoolapp.android.ui.theme.SchoolAppTheme
 
 class MainActivity : ComponentActivity() {
@@ -61,8 +68,25 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.parseColor("#1E40AF")
             )
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
         setContent {
-            SchoolAppTheme {
+            val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+
+            LaunchedEffect(activeSchool.primaryColorHex) {
+                val parsedColor = runCatching {
+                    android.graphics.Color.parseColor(activeSchool.primaryColorHex)
+                }.getOrDefault(android.graphics.Color.parseColor("#1E40AF"))
+                enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(parsedColor))
+            }
+
+            SchoolAppTheme(
+                primaryColorHex = activeSchool.primaryColorHex,
+                accentColorHex = activeSchool.accentColorHex
+            ) {
                 val context = LocalContext.current
                 val coroutineScope = rememberCoroutineScope()
                 val isLoggedIn by DiscussionRepository.isStudentLoggedIn.collectAsState()
@@ -70,6 +94,11 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     DiscussionRepository.initSession(context, coroutineScope)
+                }
+
+                // Automatically subscribe this device to the active school's FREE FCM notice topic
+                LaunchedEffect(activeSchool.id) {
+                    NotificationTopicManager.syncSchoolNoticeTopic(context, activeSchool.id)
                 }
 
                 if (isAppLoading) {
@@ -152,15 +181,16 @@ fun MainScreen(onOpenChatGPT: (String?, Uri?) -> Unit) {
     val currentRole by DiscussionRepository.currentRole.collectAsState()
     val isTeacherRole = currentRole == AppRole.TEACHER
 
+    val brand = LocalSchoolBrand.current
     val items = if (isTeacherRole) {
         listOf("Home", "My Class", "Marks", "Staff & HR")
     } else {
         listOf("Home", "My Class", "Doubts", "Forms")
     }
     val icons = if (isTeacherRole) {
-        listOf(Icons.Default.Home, Icons.Default.School, Icons.Default.AutoAwesome, Icons.Default.Badge)
+        listOf(Icons.Rounded.Home, Icons.Rounded.School, Icons.Rounded.AutoAwesome, Icons.Rounded.Badge)
     } else {
-        listOf(Icons.Default.Home, Icons.Default.School, Icons.Default.AutoAwesome, Icons.Default.DynamicForm)
+        listOf(Icons.Rounded.Home, Icons.Rounded.School, Icons.Rounded.AutoAwesome, Icons.Rounded.GridView)
     }
 
     // Pressing Back on My Class, Doubts, or Forms brings the user to Home instead of exiting the app
@@ -170,8 +200,7 @@ fun MainScreen(onOpenChatGPT: (String?, Uri?) -> Unit) {
     }
 
     Scaffold(
-        // MeteorBlack container paints the top system status-bar area seamlessly in Royal School Blue
-        containerColor = GenesisColors.MeteorBlack,
+        containerColor = brand.headerStart,
         bottomBar = {
             Column {
                 HorizontalDivider(color = GenesisColors.Border, thickness = 1.dp)
@@ -195,9 +224,9 @@ fun MainScreen(onOpenChatGPT: (String?, Uri?) -> Unit) {
                                 tabResetSignal++
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = GenesisColors.Primary,
-                                selectedTextColor = GenesisColors.Primary,
-                                indicatorColor = GenesisColors.Primary.copy(alpha = 0.12f),
+                                selectedIconColor = brand.primary,
+                                selectedTextColor = brand.primary,
+                                indicatorColor = brand.softTint,
                                 unselectedIconColor = GenesisColors.TextSecondary,
                                 unselectedTextColor = GenesisColors.TextSecondary
                             )

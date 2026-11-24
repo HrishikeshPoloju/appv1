@@ -12,11 +12,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -27,8 +31,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.schoolapp.android.R
 import com.schoolapp.android.data.AppRole
+import com.schoolapp.android.data.DiscussionRepository
 import com.schoolapp.android.data.StudentProfile
 import com.schoolapp.android.ui.theme.GenesisColors
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 
 @Composable
 fun SchoolHeader(
@@ -37,107 +43,135 @@ fun SchoolHeader(
     onProfileClick: () -> Unit = {},
     onNotificationClick: () -> Unit = {}
 ) {
+    val brand = LocalSchoolBrand.current
+    val activeSchool by DiscussionRepository.activeSchool.collectAsState()
     Surface(
-        color = GenesisColors.MeteorBlack,
+        color = Color.Transparent,
         shadowElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(brand.headerStart, brand.headerEnd)
+                    )
+                )
+        ) {
+            HeaderVectorBackdrop(
+                accentColor = Color.White,
+                modifier = Modifier.matchParentSize()
+            )
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(GenesisColors.MeteorSurface, CircleShape)
-                            .border(1.dp, GenesisColors.SkyAccent.copy(alpha = 0.65f), CircleShape),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.School,
-                            contentDescription = null,
-                            tint = GenesisColors.SkyAccent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = schoolName,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "Smart Digital Campus",
-                            color = GenesisColors.SkyAccent,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Top Profile Icon / Class & Section Pill in high-contrast Meteor Surface
-                    Surface(
-                        color = GenesisColors.MeteorSurface,
-                        shape = RoundedCornerShape(999.dp),
-                        border = BorderStroke(1.dp, GenesisColors.SkyAccent.copy(alpha = 0.55f)),
-                        modifier = Modifier.clickable { onProfileClick() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                                .border(1.2.dp, Color.White.copy(alpha = 0.45f), CircleShape),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = "Student Profile",
-                                tint = GenesisColors.SkyAccent,
-                                modifier = Modifier.size(17.dp)
-                            )
-                            if (classSectionLabel.isNotBlank()) {
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = classSectionLabel,
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                            if (activeSchool.logoUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = DiscussionRepository.resolveRenderableMediaUrl(activeSchool.logoUrl),
+                                    contentDescription = schoolName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.School,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(19.dp)
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = schoolName,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.4.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = activeSchool.tagline.ifBlank { "Smart Digital Campus" },
+                                color = brand.skyAccent,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(GenesisColors.MeteorSurface, CircleShape)
-                            .border(1.dp, GenesisColors.MeteorBorder, CircleShape)
-                            .clickable { onNotificationClick() },
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.NotificationsNone,
-                            contentDescription = "Notifications",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
+                        Surface(
+                            color = Color.White.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                            modifier = Modifier.clickable { onProfileClick() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.AccountCircle,
+                                    contentDescription = "Student Profile",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                if (classSectionLabel.isNotBlank()) {
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = classSectionLabel,
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(35.dp)
+                                .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                                .clickable { onNotificationClick() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.NotificationsNone,
+                                contentDescription = "Notifications",
+                                tint = Color.White,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
                     }
                 }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.16f), thickness = 1.dp)
             }
-            HorizontalDivider(color = GenesisColors.MeteorBorder, thickness = 1.dp)
         }
     }
 }
@@ -148,96 +182,111 @@ fun ActiveProfileBanner(
     isTeacherOrAdmin: Boolean = false,
     onClick: () -> Unit = {}
 ) {
+    val brand = LocalSchoolBrand.current
     Surface(
-        color = Color.White.copy(alpha = 0.95f),
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        color = Color.White,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, brand.borderTint.copy(alpha = 0.45f)),
         shadowElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable { onClick() }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painter = painterResource(R.drawable.avatar_student_3d),
-                contentDescription = student.fullName,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            CardCornerVectorAccent(
+                tint = brand.primary,
+                modifier = Modifier.matchParentSize()
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = student.fullName,
-                    color = Color(0xFF0F172A),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${student.classTitle} • Roll No: ${student.studentCode.ifBlank { student.rollNo }}",
-                    color = Color(0xFF475569),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            if (isTeacherOrAdmin) {
-                Surface(
-                    color = Color(0xFFF3E8FF),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, Color(0xFFD8B4FE))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(brand.softTint, CircleShape)
+                        .border(1.5.dp, brand.borderTint, CircleShape)
+                        .padding(2.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Profile",
-                            tint = GenesisColors.ClassroomPurple,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Edit",
-                            color = GenesisColors.ClassroomPurple,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.avatar_student_3d),
+                        contentDescription = student.fullName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                    )
                 }
-            } else {
-                Surface(
-                    color = Color(0xFFDCFCE7),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, Color(0xFF86EFAC))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = student.fullName,
+                        color = Color(0xFF0F172A),
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${student.classTitle} • Roll No: ${student.studentCode.ifBlank { student.rollNo }}",
+                        color = Color(0xFF475569),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                if (isTeacherOrAdmin) {
+                    Surface(
+                        color = Color(0xFFF3E8FF),
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, Color(0xFFD8B4FE))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Verified,
-                            contentDescription = "Verified",
-                            tint = Color(0xFF16A34A),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Verified",
-                            color = Color(0xFF16A34A),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Edit,
+                                contentDescription = "Edit Profile",
+                                tint = GenesisColors.ClassroomPurple,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Edit",
+                                color = GenesisColors.ClassroomPurple,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = Color(0xFFDCFCE7),
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Verified,
+                                contentDescription = "Verified",
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Verified",
+                                color = Color(0xFF16A34A),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -409,13 +458,14 @@ fun CategoryBadge(category: String) {
 fun SubjectChip(
     label: String,
     selected: Boolean,
-    activeColor: Color = GenesisColors.Primary,
+    activeColor: Color = LocalSchoolBrand.current.primary,
     onClick: () -> Unit
 ) {
     Surface(
         color = if (selected) activeColor else Color.White,
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(1.dp, if (selected) activeColor else GenesisColors.Border),
+        shadowElevation = if (selected) 2.dp else 0.dp,
         modifier = Modifier
             .heightIn(min = 34.dp)
             .clickable { onClick() }
@@ -462,30 +512,47 @@ fun SubScreenTopBar(
     title: String,
     onBack: () -> Unit
 ) {
+    val brand = LocalSchoolBrand.current
     Surface(
-        color = GenesisColors.MeteorBlack,
-        shadowElevation = 3.dp,
+        color = Color.Transparent,
+        shadowElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(brand.headerStart, brand.headerEnd)
+                    )
+                )
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
+            HeaderVectorBackdrop(
+                accentColor = Color.White,
+                modifier = Modifier.matchParentSize()
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
         }
     }
 }

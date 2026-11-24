@@ -30,10 +30,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import com.schoolapp.android.ui.theme.LocalSchoolBrand
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -168,10 +171,11 @@ fun HomeScreen(
                 section = activeStudent.section,
                 onDismiss = { showChangeClassDialog = false },
                 onSwitchToTeacherRole = {
-                    DiscussionRepository.switchRole(AppRole.TEACHER)
+                    showChangeClassDialog = false
+                    DiscussionRepository.logout(context)
                     Toast.makeText(
                         context,
-                        "Switched to Teacher mode — you can now edit student details",
+                        "Signed out. Choose your role portal to sign in.",
                         Toast.LENGTH_SHORT
                     ).show()
                 },
@@ -187,6 +191,52 @@ fun HomeScreen(
         }
     }
 
+    // Load Home notices ONCE per session; trigger feature APIs ONLY when the user clicks that specific feature
+    LaunchedEffect(subRoute, selectedClass.id, activeStudent.id) {
+        when (subRoute) {
+            HomeSubRoute.FEED -> {
+                if (DiscussionRepository.shouldLoadHomeFeedOnce(selectedClass.id)) {
+                    DiscussionRepository.fetchNoticesFromBackend(coroutineScope)
+                }
+            }
+            HomeSubRoute.REPORT_CARD -> {
+                val targetClass = if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) selectedClass.id else activeStudent.classId
+                DiscussionRepository.fetchClassExamsFromBackend(targetClass, coroutineScope)
+                DiscussionRepository.fetchClassSubjectsFromBackend(targetClass, coroutineScope)
+                DiscussionRepository.fetchStudentExamResultsFromBackend(activeStudent.id, coroutineScope)
+            }
+            HomeSubRoute.MARKS_AUTOMATION -> {
+                DiscussionRepository.fetchClassSubjectsFromBackend(selectedClass.id, coroutineScope)
+                DiscussionRepository.fetchClassExamsFromBackend(selectedClass.id, coroutineScope)
+                DiscussionRepository.fetchClassRosterFromBackend(selectedClass.id, coroutineScope)
+            }
+            HomeSubRoute.ATTENDANCE -> {
+                if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) {
+                    DiscussionRepository.fetchClassRosterFromBackend(selectedClass.id, coroutineScope)
+                } else {
+                    DiscussionRepository.fetchStudentAttendanceFromBackend(activeStudent.id, coroutineScope)
+                }
+            }
+            HomeSubRoute.ASSIGNMENTS, HomeSubRoute.MULTI_HOMEWORK -> {
+                val targetClass = if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) selectedClass.id else activeStudent.classId
+                DiscussionRepository.fetchHomeworkFromBackend(targetClass, coroutineScope)
+            }
+            HomeSubRoute.SECTION_VERIFICATION, HomeSubRoute.CLASS_YEAR_MANAGER -> {
+                DiscussionRepository.fetchClassRosterFromBackend(selectedClass.id, coroutineScope)
+            }
+            HomeSubRoute.PROUD_PARENT_QR -> {
+                DiscussionRepository.fetchReferralCodeFromBackend(coroutineScope)
+            }
+            HomeSubRoute.ADMIN_SIBLINGS -> {
+                DiscussionRepository.fetchSiblingsFromBackend(coroutineScope)
+            }
+            HomeSubRoute.SCHOOL_INTELLIGENCE -> {
+                DiscussionRepository.fetchSchoolIntelligenceFromBackend(coroutineScope)
+            }
+            else -> {}
+        }
+    }
+
     when (subRoute) {
         HomeSubRoute.ADD_STUDENT -> {
             AddStudentFlowScreen(
@@ -198,24 +248,33 @@ fun HomeScreen(
             )
         }
         HomeSubRoute.NOTICE_DETAILS -> {
-            val notice = selectedNotice ?: notices.first()
-            NoticeDetailsScreen(
-                notice = notice,
-                onBack = { subRoute = HomeSubRoute.FEED }
-            )
+            val notice = selectedNotice ?: notices.firstOrNull()
+            if (notice != null) {
+                NoticeDetailsScreen(
+                    notice = notice,
+                    onBack = { subRoute = HomeSubRoute.FEED }
+                )
+            } else {
+                subRoute = HomeSubRoute.FEED
+            }
         }
         HomeSubRoute.PUBLISH_NOTICE -> {
             PublishNoticeScreen(
                 onBack = { subRoute = HomeSubRoute.FEED },
-                onPublish = { title, content, cat ->
+                onPublish = { title, content, cat, imageUri, targetAudience, startsAtIso, expiresAtIso ->
                     DiscussionRepository.postAdminNotice(
                         title = title,
                         content = content,
                         category = cat,
                         author = if (currentRole == AppRole.ADMIN) "Principal's Office" else "Class Teacher",
+                        imageUri = imageUri,
+                        targetAudience = targetAudience,
+                        startsAtIso = startsAtIso,
+                        expiresAtIso = expiresAtIso,
                         scope = coroutineScope
                     )
-                    Toast.makeText(context, "Notice published to school feed!", Toast.LENGTH_SHORT).show()
+                    val msg = if (!startsAtIso.isNullOrBlank()) "Notice scheduled successfully!" else "Notice published to school feed!"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     subRoute = HomeSubRoute.FEED
                 }
             )
@@ -400,40 +459,143 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             // 1. Meteor Black School Header (Shown for Teacher / Admin / Parent; Student matches reference UI)
-            if (currentRole != AppRole.STUDENT) {
-                item {
-                    val headerPillLabel = if (currentRole == AppRole.TEACHER) {
-                        "Staff"
-                    } else {
-                        "${activeStudent.className.removePrefix("Class ").trim()}-${activeStudent.section}"
+            // Top Branded School Header across ALL roles (Student, Parent, Teacher, Admin)
+            item {
+                val headerPillLabel = if (currentRole == AppRole.TEACHER) {
+                    "Staff"
+                } else {
+                    "${activeStudent.className.removePrefix("Class ").trim()}-${activeStudent.section}"
+                }
+                val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+                SchoolHeader(
+                    schoolName = activeSchool.name.uppercase(),
+                    classSectionLabel = headerPillLabel,
+                    onProfileClick = {
+                        if (currentRole == AppRole.TEACHER) {
+                            staffHrInitialTab = 0
+                            subRoute = HomeSubRoute.STAFF_HR
+                        } else {
+                            showChangeClassDialog = true
+                        }
+                    },
+                    onNotificationClick = {
+                        selectedNotice = notices.firstOrNull()
+                        if (selectedNotice != null) {
+                            subRoute = HomeSubRoute.NOTICE_DETAILS
+                        }
                     }
-                    SchoolHeader(
-                        schoolName = "GENESIS SCHOOL BEERAMGUDA",
-                        classSectionLabel = headerPillLabel,
-                        onProfileClick = {
-                            if (currentRole == AppRole.TEACHER) {
-                                staffHrInitialTab = 0
-                                subRoute = HomeSubRoute.STAFF_HR
-                            } else {
-                                showChangeClassDialog = true
+                )
+            }
+
+            // Production Role-Locked Session Bar (strictly isolated by authenticated role + Sign Out)
+            item {
+                val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+                val roleLabel = when (currentRole) {
+                    AppRole.STUDENT -> "Student Portal"
+                    AppRole.PARENT -> "Parent Portal"
+                    AppRole.TEACHER -> "Teacher Portal"
+                    AppRole.ADMIN -> "Admin / Principal Portal"
+                }
+                var showSignOutConfirm by remember { mutableStateOf(false) }
+                if (showSignOutConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showSignOutConfirm = false },
+                        title = {
+                            Text(
+                                "Sign Out",
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextPrimary
+                            )
+                        },
+                        text = {
+                            Text(
+                                "Sign out of ${activeSchool.name} ($roleLabel)? You will need your school's secret code and password to sign back in.",
+                                color = GenesisColors.TextSecondary,
+                                fontSize = 13.sp
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showSignOutConfirm = false
+                                    DiscussionRepository.logout(context)
+                                    Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                            ) {
+                                Text("Sign Out", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         },
-                        onNotificationClick = {
-                            selectedNotice = notices.firstOrNull()
-                            if (selectedNotice != null) {
-                                subRoute = HomeSubRoute.NOTICE_DETAILS
+                        dismissButton = {
+                            TextButton(onClick = { showSignOutConfirm = false }) {
+                                Text("Cancel", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     )
                 }
-            }
-
-            // Role View Selector
-            item {
-                PrototypeRoleBar(
-                    currentRole = currentRole,
-                    onRoleSelected = { DiscussionRepository.switchRole(it) }
-                )
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, GenesisColors.Border),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                color = Color(0xFFDBEAFE),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.VerifiedUser,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier
+                                        .padding(6.dp)
+                                        .size(16.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = roleLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GenesisColors.TextPrimary
+                                )
+                                Text(
+                                    text = "${activeSchool.schoolCode.ifBlank { "SCHOOL" }} • Verified Access",
+                                    fontSize = 10.sp,
+                                    color = GenesisColors.TextSecondary
+                                )
+                            }
+                        }
+                        Surface(
+                            color = Color(0xFFF8FAFC),
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(1.dp, GenesisColors.Border),
+                            modifier = Modifier.clickable { showSignOutConfirm = true }
+                        ) {
+                            Text(
+                                text = "Sign Out",
+                                color = GenesisColors.TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             // Principal / School Management Executive ROI Command Center
@@ -485,24 +647,9 @@ fun HomeScreen(
                     )
                 }
 
-                // Student Hub Hero Banner matching reference image
+                // Same 3 Auto-Swiping School Hero Banners as Parent mode
                 item {
-                    Card(
-                        shape = RoundedCornerShape(24.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.banner_student_hub),
-                            contentDescription = "Student Hub",
-                            contentScale = ContentScale.FillWidth,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(24.dp))
-                        )
-                    }
+                    SchoolHeroCarousel()
                 }
             } else if (currentRole != AppRole.TEACHER) {
                 // 2. Active-Student Banner (Shown only for Parent / Admin)
@@ -671,15 +818,25 @@ fun HomeScreen(
                 }
             }
 
-            // Notices Feed
-            items(notices, key = { it.id }) { notice ->
-                NoticeFeedCard(
-                    notice = notice,
-                    onClick = {
-                        selectedNotice = notice
-                        subRoute = HomeSubRoute.NOTICE_DETAILS
-                    }
-                )
+            // Notices Feed (with illustrated empty state when no notices exist yet)
+            if (notices.isEmpty()) {
+                item {
+                    EmptyStateIllustrationCard(
+                        title = "All Caught Up on Notices",
+                        subtitle = "School circulars, event announcements, and emergency alerts will appear right here.",
+                        illustrationType = EmptyStateIllustrationType.NOTICES
+                    )
+                }
+            } else {
+                items(notices, key = { it.id }) { notice ->
+                    NoticeFeedCard(
+                        notice = notice,
+                        onClick = {
+                            selectedNotice = notice
+                            subRoute = HomeSubRoute.NOTICE_DETAILS
+                        }
+                    )
+                }
             }
         }
             }
@@ -688,7 +845,7 @@ fun HomeScreen(
 }
 
 private data class SchoolCarouselSlide(
-    val imageUrl: String,
+    val imageRes: Int,
     val badge: String,
     val headline: String,
     val subtitle: String
@@ -697,24 +854,26 @@ private data class SchoolCarouselSlide(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SchoolHeroCarousel() {
-    val slides = remember {
+    val brand = LocalSchoolBrand.current
+    val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+    val slides = remember(activeSchool.name, activeSchool.tagline) {
         listOf(
             SchoolCarouselSlide(
-                imageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&q=80&w=900",
-                badge = "CAMPUS EXCELLENCE",
+                imageRes = R.drawable.asset_reading_student,
+                badge = activeSchool.schoolCode.ifBlank { "CAMPUS EXCELLENCE" },
                 headline = "Building Brighter\nFutures Together",
-                subtitle = "CBSE Holistic Academics • Beeramguda Campus"
+                subtitle = activeSchool.tagline.ifBlank { "${activeSchool.name} • Smart Campus" }
             ),
             SchoolCarouselSlide(
-                imageUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=900",
+                imageRes = R.drawable.asset_results,
                 badge = "SMART DIGITAL CLASSROOMS",
                 headline = "Interactive STEM &\nAI Learning Labs",
                 subtitle = "100% Concept Clarity & Olympiad Readiness"
             ),
             SchoolCarouselSlide(
-                imageUrl = "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=900",
+                imageRes = R.drawable.asset_myclass,
                 badge = "CHAMPIONS ARENA",
-                headline = "Sports, Leadership &\nAnnual Cultural Fest",
+                headline = "Attendance, Sports &\nAcademic Excellence",
                 subtitle = "Nurturing Confidence Beyond Textbooks"
             )
         )
@@ -730,11 +889,11 @@ private fun SchoolHeroCarousel() {
     }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .height(158.dp),
+            .height(166.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -744,8 +903,8 @@ private fun SchoolHeroCarousel() {
             ) { page ->
                 val slide = slides[page]
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = slide.imageUrl,
+                    Image(
+                        painter = painterResource(slide.imageRes),
                         contentDescription = slide.headline,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -756,8 +915,8 @@ private fun SchoolHeroCarousel() {
                             .background(
                                 Brush.horizontalGradient(
                                     colors = listOf(
-                                        GenesisColors.MeteorBlack.copy(alpha = 0.92f),
-                                        GenesisColors.MeteorBlack.copy(alpha = 0.62f),
+                                        brand.headerStart.copy(alpha = 0.92f),
+                                        brand.headerStart.copy(alpha = 0.65f),
                                         Color.Transparent
                                     )
                                 )
@@ -832,94 +991,169 @@ private data class ShortcutTileData(
     val icon: ImageVector,
     val iconTint: Color,
     val bgTint: Color,
-    val badgeText: String? = null
+    val badgeText: String? = null,
+    val iconRes: Int? = null
 )
 
 @Composable
 private fun AdminShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
+    // Clean, consistent palette matching Teacher UI: Primary blue (#2563EB / #DBEAFE) & Teal (#0F766E / #CCFBF1)
     val tiles = listOf(
-        ShortcutTileData("Sibling Leads", Icons.Default.FamilyRestroom, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "Leads"),
-        ShortcutTileData("Student Control", Icons.Default.VerifiedUser, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
-        ShortcutTileData("Staff HR", Icons.Default.Badge, Color(0xFF7C3AED), Color(0xFFEDE9FE)),
-        ShortcutTileData("Roll Call", Icons.Default.HowToReg, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "<60s"),
-        ShortcutTileData("Auto Marks", Icons.Default.AutoAwesome, Color(0xFF7C3AED), Color(0xFFEDE9FE), badgeText = "Auto"),
-        ShortcutTileData("Assignments", Icons.Default.Assignment, Color(0xFFC27838), Color(0xFFFFF7ED)),
-        ShortcutTileData("Exam Schedule", Icons.Default.CalendarMonth, Color(0xFF0284C7), Color(0xFFE0F2FE)),
-        ShortcutTileData("Fee Structure", Icons.Default.CurrencyRupee, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
-        ShortcutTileData("Digital ID", Icons.Default.Badge, Color(0xFF0284C7), Color(0xFFE0F2FE)),
-        ShortcutTileData("Calendar", Icons.Default.EventNote, Color(0xFFD97706), Color(0xFFFEF3C7)),
-        ShortcutTileData("AI Copilot", Icons.Default.Bolt, Color(0xFF10A37F), Color(0xFFECFDF5))
+        ShortcutTileData("Sibling Leads", Icons.Rounded.FamilyRestroom, GenesisColors.Primary, GenesisColors.LightBlue, badgeText = "Leads"),
+        ShortcutTileData("Student Control", Icons.Rounded.VerifiedUser, GenesisColors.Primary, GenesisColors.LightBlue),
+        ShortcutTileData("Staff HR", Icons.Rounded.Badge, GenesisColors.Teal, Color(0xFFCCFBF1)),
+        ShortcutTileData("Roll Call", Icons.Rounded.HowToReg, GenesisColors.Primary, GenesisColors.LightBlue, badgeText = "<60s"),
+        ShortcutTileData("Auto Marks", Icons.Rounded.Grade, GenesisColors.Primary, GenesisColors.LightBlue, badgeText = "Auto"),
+        ShortcutTileData("Assignments", Icons.Rounded.Assignment, GenesisColors.Teal, Color(0xFFCCFBF1)),
+        ShortcutTileData("Exam Schedule", Icons.Rounded.CalendarMonth, GenesisColors.Teal, Color(0xFFCCFBF1)),
+        ShortcutTileData("Fee Structure", Icons.Rounded.CurrencyRupee, GenesisColors.Primary, GenesisColors.LightBlue),
+        ShortcutTileData("Digital ID", Icons.Rounded.Badge, GenesisColors.Teal, Color(0xFFCCFBF1)),
+        ShortcutTileData("Calendar", Icons.Rounded.EventNote, GenesisColors.Teal, Color(0xFFCCFBF1)),
+        ShortcutTileData("AI Copilot", Icons.Rounded.AutoAwesome, GenesisColors.Teal, Color(0xFFCCFBF1))
     )
-    ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
+    ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick, cleanSimpleStyle = true)
 }
 
 @Composable
 private fun TeacherShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
+    // 10 cleanly extracted 3D teacher icons with transparent backgrounds on crisp white cards
     val tiles = listOf(
-        ShortcutTileData("Roll Call", Icons.Default.HowToReg, Color(0xFF16A34A), Color(0xFFDCFCE7), badgeText = "<60s"),
-        ShortcutTileData("Auto Marks", Icons.Default.AutoAwesome, Color(0xFF7C3AED), Color(0xFFEDE9FE), badgeText = "Auto"),
-        ShortcutTileData("Assignments", Icons.Default.Assignment, Color(0xFFC27838), Color(0xFFFFF7ED)),
-        ShortcutTileData("Exam Schedule", Icons.Default.CalendarMonth, Color(0xFF0284C7), Color(0xFFE0F2FE)),
-        ShortcutTileData("Student Control", Icons.Default.VerifiedUser, Color(0xFF1E40AF), Color(0xFFDBEAFE)),
-        ShortcutTileData("My Attendance", Icons.Default.Login, Color(0xFF0D9488), Color(0xFFCCFBF1)),
-        ShortcutTileData("Staff Leave", Icons.Default.EventBusy, Color(0xFFD97706), Color(0xFFFEF3C7)),
-        ShortcutTileData("Class Doubts", Icons.Default.Forum, Color(0xFF0284C7), Color(0xFFE0F2FE)),
-        ShortcutTileData("Upload Notes", Icons.Default.PictureAsPdf, Color(0xFFDC2626), Color(0xFFFEE2E2), badgeText = "PDF"),
-        ShortcutTileData("Holidays", Icons.Default.EventNote, Color(0xFF16A34A), Color(0xFFDCFCE7))
+        ShortcutTileData("Roll Call", Icons.Rounded.HowToReg, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_roll_call),
+        ShortcutTileData("Auto Marks", Icons.Rounded.Grade, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_auto_marks),
+        ShortcutTileData("Assignments", Icons.Rounded.Assignment, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_assignments),
+        ShortcutTileData("Exam Schedule", Icons.Rounded.CalendarMonth, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_exam_schedule),
+        ShortcutTileData("Student Control", Icons.Rounded.VerifiedUser, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_student_control),
+        ShortcutTileData("My Attendance", Icons.Rounded.Fingerprint, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_my_attendance),
+        ShortcutTileData("Staff Leave", Icons.Rounded.EventBusy, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_staff_leave),
+        ShortcutTileData("Class Doubts", Icons.Rounded.Forum, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_class_doubts),
+        ShortcutTileData("Upload Notes", Icons.Rounded.Description, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_upload_notes),
+        ShortcutTileData("Holidays", Icons.Rounded.EventNote, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_holidays)
     )
-    ShortcutTileGridContent(tiles = tiles, onShortcutClick = onShortcutClick)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        tiles.chunked(3).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                rowItems.forEach { item ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(102.dp)
+                            .clickable { onShortcutClick(item.label) }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 6.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Image(
+                                painter = painterResource(item.iconRes!!),
+                                contentDescription = item.label,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = item.label,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GenesisColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                } else if (rowItems.size == 2) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
 }
 
 @Composable
 private fun ShortcutTileGridContent(
     tiles: List<ShortcutTileData>,
-    onShortcutClick: (String) -> Unit
+    onShortcutClick: (String) -> Unit,
+    cleanSimpleStyle: Boolean = false
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         tiles.chunked(3).forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 rowItems.forEach { item ->
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                        shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = if (cleanSimpleStyle) 1.dp else 2.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(86.dp)
+                            .height(92.dp)
                             .clickable { onShortcutClick(item.label) }
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .background(item.bgTint, RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (!cleanSimpleStyle) {
+                                CardCornerVectorAccent(
+                                    tint = item.iconTint,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
+                            Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                                 ) {
-                                    when (item.label) {
-                                        "Homework", "Assignments" -> HomeworkIllustration(modifier = Modifier.size(28.dp))
-                                        "Timetable", "Exam Schedule" -> TimetableIllustration(modifier = Modifier.size(28.dp))
-                                        "Attendance", "Roll Call" -> AttendanceIllustration(modifier = Modifier.size(28.dp))
-                                        "Result", "Report Card" -> ResultIllustration(modifier = Modifier.size(28.dp))
-                                        else -> Icon(item.icon, contentDescription = item.label, tint = item.iconTint, modifier = Modifier.size(22.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(item.bgTint, RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (!cleanSimpleStyle && item.iconRes != null) {
+                                            Image(
+                                                painter = painterResource(item.iconRes),
+                                                contentDescription = item.label,
+                                                contentScale = ContentScale.Fit,
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                            )
+                                        } else {
+                                            Icon(item.icon, contentDescription = item.label, tint = item.iconTint, modifier = Modifier.size(22.dp))
+                                        }
                                     }
-                                }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = item.label,
@@ -947,63 +1181,78 @@ private fun ShortcutTileGridContent(
                             }
                         }
                     }
+                    }
                 }
             }
         }
     }
 }
 
-private data class HubShortcutItem(
-    val label: String,
-    val iconRes: Int
-)
-
 @Composable
 private fun ShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
-    val items = listOf(
-        HubShortcutItem("Homework", R.drawable.tile_homework),
-        HubShortcutItem("Timetable", R.drawable.tile_timetable),
-        HubShortcutItem("Attendance", R.drawable.tile_attendance),
-        HubShortcutItem("Result", R.drawable.tile_result),
-        HubShortcutItem("Practice Tests", R.drawable.tile_practice_tests),
-        HubShortcutItem("Mistakes", R.drawable.tile_mistakes),
-        HubShortcutItem("Fee Structure", R.drawable.tile_fee_structure),
-        HubShortcutItem("Study Notes", R.drawable.tile_study_notes),
-        HubShortcutItem("Class Doubts", R.drawable.tile_class_doubts),
-        HubShortcutItem("Digital ID", R.drawable.tile_digital_id),
-        HubShortcutItem("Calendar", R.drawable.tile_calendar),
-        HubShortcutItem("Ask AI Tutor", R.drawable.tile_ask_ai)
+    // 12 cleanly extracted 3D student icons with transparent backgrounds on crisp white cards
+    val tiles = listOf(
+        ShortcutTileData("Homework", Icons.Rounded.Assignment, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_student_homework),
+        ShortcutTileData("Timetable", Icons.Rounded.CalendarViewWeek, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_student_timetable),
+        ShortcutTileData("Attendance", Icons.Rounded.HowToReg, GenesisColors.Success, Color.Transparent, iconRes = R.drawable.ic_student_attendance),
+        ShortcutTileData("Result", Icons.Rounded.EmojiEvents, GenesisColors.Warning, Color.Transparent, iconRes = R.drawable.ic_student_result),
+        ShortcutTileData("Practice Tests", Icons.Rounded.Quiz, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_student_practice_tests),
+        ShortcutTileData("Mistakes", Icons.Rounded.FindInPage, GenesisColors.Emergency, Color.Transparent, iconRes = R.drawable.ic_student_mistakes),
+        ShortcutTileData("Fee Structure", Icons.Rounded.AccountBalanceWallet, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_student_fee_structure),
+        ShortcutTileData("Study Notes", Icons.Rounded.MenuBook, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_student_study_notes),
+        ShortcutTileData("Class Doubts", Icons.Rounded.Forum, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_student_class_doubts),
+        ShortcutTileData("Digital ID", Icons.Rounded.Badge, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_student_digital_id),
+        ShortcutTileData("Calendar", Icons.Rounded.CalendarMonth, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_student_calendar),
+        ShortcutTileData("Ask AI Tutor", Icons.Rounded.AutoAwesome, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_student_ask_ai)
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items.chunked(3).forEach { rowItems ->
+        tiles.chunked(3).forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                rowItems.forEach { tile ->
-                    Box(
+                rowItems.forEach { item ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), clip = false)
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable { onShortcutClick(tile.label) }
+                            .height(102.dp)
+                            .clickable { onShortcutClick(item.label) }
                     ) {
-                        Image(
-                            painter = painterResource(tile.iconRes),
-                            contentDescription = tile.label,
-                            contentScale = ContentScale.FillWidth,
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(158f / 114f)
-                        )
+                                .fillMaxSize()
+                                .padding(horizontal = 6.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Image(
+                                painter = painterResource(item.iconRes!!),
+                                contentDescription = item.label,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.size(54.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = item.label,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GenesisColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -1016,10 +1265,12 @@ private fun NoticeFeedCard(
     notice: AdminNotice,
     onClick: () -> Unit
 ) {
+    val brand = LocalSchoolBrand.current
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -1041,13 +1292,24 @@ private fun NoticeFeedCard(
                         .clip(RoundedCornerShape(12.dp))
                 )
             } else {
+                val (catIcon, catBg, catTint) = when (notice.category.uppercase()) {
+                    "EVENT" -> Triple(Icons.Rounded.EmojiEvents, Color(0xFFDCFCE7), GenesisColors.Success)
+                    "ACADEMIC" -> Triple(Icons.Rounded.MenuBook, Color(0xFFCCFBF1), GenesisColors.Teal)
+                    "EMERGENCY" -> Triple(Icons.Rounded.Warning, Color(0xFFFEE2E2), GenesisColors.Emergency)
+                    else -> Triple(Icons.Rounded.Campaign, GenesisColors.LightBlue, GenesisColors.Primary)
+                }
                 Box(
                     modifier = Modifier
-                        .size(74.dp)
-                        .background(Color(0xFFDBEAFE), RoundedCornerShape(12.dp)),
+                        .size(64.dp)
+                        .background(catBg, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Campaign, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(32.dp))
+                    Icon(
+                        imageVector = catIcon,
+                        contentDescription = notice.category,
+                        tint = catTint,
+                        modifier = Modifier.size(30.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -1283,6 +1545,14 @@ fun MyClassScreen(
         }
     }
 
+    // Load Notes & Doubts strictly for the logged-in student's class & section when My Class opens
+    LaunchedEffect(selectedClass.id) {
+        val targetClass = if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) selectedClass.id else activeStudent.classId
+        DiscussionRepository.fetchDiscussionsFromBackend(targetClass, coroutineScope)
+        DiscussionRepository.fetchNotesFromBackend(targetClass, coroutineScope)
+        DiscussionRepository.fetchClassSubjectsFromBackend(targetClass, coroutineScope)
+    }
+
     when (subRoute) {
         MyClassSubRoute.ASK_DOUBT -> {
             AskDoubtScreen(
@@ -1374,11 +1644,33 @@ fun MyClassScreen(
                         .padding(padding)
                 ) {
                     // Class Header Bar (Locked for Student/Parent, Switchable Dropdown for Teacher/Admin)
+                    val brand = LocalSchoolBrand.current
                     Surface(
-                        color = GenesisColors.MeteorBlack,
+                        color = Color.Transparent,
+                        shadowElevation = 4.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(brand.headerStart, brand.headerEnd)
+                                    )
+                                )
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.asset_myclass),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .alpha(0.16f)
+                            )
+                            HeaderVectorBackdrop(
+                                accentColor = Color.White,
+                                modifier = Modifier.matchParentSize()
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1390,12 +1682,12 @@ fun MyClassScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
-                                            .background(GenesisColors.MeteorSurface, RoundedCornerShape(8.dp))
-                                            .border(1.dp, GenesisColors.MeteorBorder, RoundedCornerShape(8.dp)),
+                                            .size(36.dp)
+                                            .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                                            .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.School, contentDescription = null, tint = GenesisColors.SkyAccent, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Rounded.School, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
@@ -1408,14 +1700,14 @@ fun MyClassScreen(
                                         Text(
                                             text = if (canSwitchClasses) "Tap to switch class" else "Assigned Classroom",
                                             fontSize = 11.sp,
-                                            color = GenesisColors.SkyAccent
+                                            color = brand.skyAccent
                                         )
                                     }
                                 }
                                 if (canSwitchClasses) {
-                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Switch Class", tint = Color.White)
+                                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Switch Class", tint = Color.White)
                                 } else {
-                                    Icon(Icons.Default.Lock, contentDescription = "Locked Class", tint = GenesisColors.SkyAccent, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Rounded.Lock, contentDescription = "Locked Class", tint = brand.skyAccent, modifier = Modifier.size(16.dp))
                                 }
                             }
 
@@ -1566,6 +1858,18 @@ fun MyClassScreen(
                                     }
                                 }
 
+                                if (classScopedDiscussions.isEmpty()) {
+                                    item {
+                                        EmptyStateIllustrationCard(
+                                            title = "No Class Doubts Yet",
+                                            subtitle = "Have a question on homework or a concept? Post it here for your teachers & classmates to solve together.",
+                                            illustrationType = EmptyStateIllustrationType.DOUBTS,
+                                            actionLabel = "Ask First Doubt",
+                                            onAction = { subRoute = MyClassSubRoute.ASK_DOUBT }
+                                        )
+                                    }
+                                }
+
                                 items(classScopedDiscussions, key = { it.id }) { post ->
                                     ClassroomDoubtCard(
                                         doubt = post,
@@ -1642,6 +1946,20 @@ fun MyClassScreen(
                                                 onClick = { selectedSubjectFilter = subj }
                                             )
                                         }
+                                    }
+                                }
+
+                                if (classScopedNotes.isEmpty()) {
+                                    item {
+                                        EmptyStateIllustrationCard(
+                                            title = "No Study Notes Uploaded Yet",
+                                            subtitle = "Chapter PDFs, revision sheets, and teacher lecture slides for ${selectedClass.name} will appear here.",
+                                            illustrationType = EmptyStateIllustrationType.NOTES,
+                                            actionLabel = if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) "Upload Study Notes" else null,
+                                            onAction = if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) {
+                                                { subRoute = MyClassSubRoute.UPLOAD_NOTES }
+                                            } else null
+                                        )
                                     }
                                 }
 
@@ -3629,6 +3947,21 @@ fun FormsScreen(
         }
     }
 
+    // Trigger feature-specific APIs only when a Forms/Operations sub-screen is clicked
+    LaunchedEffect(subRoute, selectedClass.id) {
+        when (subRoute) {
+            FormsSubRoute.MARKS_AUTOMATION -> {
+                DiscussionRepository.fetchClassSubjectsFromBackend(selectedClass.id)
+                DiscussionRepository.fetchClassExamsFromBackend(selectedClass.id)
+                DiscussionRepository.fetchClassRosterFromBackend(selectedClass.id)
+            }
+            FormsSubRoute.STUDENT_CONTROL, FormsSubRoute.ROLL_CALL -> {
+                DiscussionRepository.fetchClassRosterFromBackend(selectedClass.id)
+            }
+            else -> {}
+        }
+    }
+
     when (subRoute) {
         FormsSubRoute.STAFF_HR -> {
             StaffHrHubScreen(
@@ -3703,37 +4036,64 @@ fun FormsScreen(
             )
         }
         FormsSubRoute.SERVICES -> {
+            val brand = LocalSchoolBrand.current
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(GenesisColors.Background)
             ) {
                 Surface(
-                    color = GenesisColors.MeteorBlack,
+                    color = Color.Transparent,
+                    shadowElevation = 4.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = if (currentRole == AppRole.TEACHER) "Teacher & Staff Hub" else "School Services",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(brand.headerStart, brand.headerEnd)
+                                )
                             )
-                            Text(
-                                text = if (currentRole == AppRole.TEACHER) {
-                                    "${meStaff?.name ?: "Faculty Member"} • ${meStaff?.designation ?: selectedClass.name}"
-                                } else {
-                                    "${activeStudent.fullName} • ${activeStudent.classTitle}"
-                                },
-                                fontSize = 12.sp,
-                                color = GenesisColors.SkyAccent
+                    ) {
+                        HeaderVectorBackdrop(
+                            accentColor = Color.White,
+                            modifier = Modifier.matchParentSize()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (currentRole == AppRole.TEACHER) "Teacher & Staff Hub" else "School Services",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = if (currentRole == AppRole.TEACHER) {
+                                        "${meStaff?.name ?: "Faculty Member"} • ${meStaff?.designation ?: selectedClass.name}"
+                                    } else {
+                                        "${activeStudent.fullName} • ${activeStudent.classTitle}"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = brand.skyAccent
+                                )
+                            }
+                            Image(
+                                painter = painterResource(
+                                    if (currentRole == AppRole.TEACHER) R.drawable.ic_hub_digital_id else R.drawable.avatar_student_3d
+                                ),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
                             )
                         }
                     }
@@ -3746,12 +4106,13 @@ fun FormsScreen(
                     contentPadding = PaddingValues(top = 14.dp, bottom = 88.dp)
                 ) {
                     if (currentRole == AppRole.TEACHER) {
-                        // 100% Pure Teacher & Staff Tools (No unnecessary student/parent features)
+                        // Clean, simple Teacher & Staff menu following the reference palette
                         item {
                             ServiceMenuCard(
                                 title = "My Staff Profile & Colleagues",
                                 subtitle = "View & edit contact profile, teaching load & staff directory",
-                                icon = Icons.Default.Badge,
+                                icon = Icons.Rounded.Badge,
+                                useSimpleVectorIcon = true,
                                 onClick = {
                                     staffHrInitialTab = 0
                                     subRoute = FormsSubRoute.STAFF_HR
@@ -3760,7 +4121,9 @@ fun FormsScreen(
                             ServiceMenuCard(
                                 title = "My Staff Attendance (Check In / Out)",
                                 subtitle = "1-tap daily check-in, check-out & monthly log",
-                                icon = Icons.Default.Login,
+                                icon = Icons.Rounded.Fingerprint,
+                                useSimpleVectorIcon = true,
+                                isSecondaryAccent = true,
                                 onClick = {
                                     staffHrInitialTab = 1
                                     subRoute = FormsSubRoute.STAFF_HR
@@ -3769,7 +4132,9 @@ fun FormsScreen(
                             ServiceMenuCard(
                                 title = "Staff Leave Applications",
                                 subtitle = "Leave balance & apply for Casual, Sick or Earned leave",
-                                icon = Icons.Default.EventBusy,
+                                icon = Icons.Rounded.EventBusy,
+                                useSimpleVectorIcon = true,
+                                isSecondaryAccent = true,
                                 onClick = {
                                     staffHrInitialTab = 2
                                     subRoute = FormsSubRoute.STAFF_HR
@@ -3778,37 +4143,46 @@ fun FormsScreen(
                             ServiceMenuCard(
                                 title = "Marks & Auto Report Card Engine",
                                 subtitle = "Enter marks once • Auto totals, %, grades, history & approval",
-                                icon = Icons.Default.AutoAwesome,
+                                icon = Icons.Rounded.Grade,
+                                useSimpleVectorIcon = true,
                                 onClick = { subRoute = FormsSubRoute.MARKS_AUTOMATION }
                             )
                             ServiceMenuCard(
                                 title = "Student Data Control (Verify / Block / Edit)",
                                 subtitle = "Verify class logins, edit student data, add student or call parent",
-                                icon = Icons.Default.VerifiedUser,
+                                icon = Icons.Rounded.VerifiedUser,
+                                useSimpleVectorIcon = true,
                                 onClick = { subRoute = FormsSubRoute.STUDENT_CONTROL }
                             )
                             ServiceMenuCard(
                                 title = "Class Roll Call (<60s Attendance)",
                                 subtitle = "1-tap Mark All Present + automatic parent absentee alerts",
-                                icon = Icons.Default.HowToReg,
+                                icon = Icons.Rounded.HowToReg,
+                                useSimpleVectorIcon = true,
                                 onClick = { subRoute = FormsSubRoute.ROLL_CALL }
                             )
                             ServiceMenuCard(
                                 title = "Classes, Promotion & Section Data Cleanup",
                                 subtitle = "Create classes/sections, promote students & manage old section data",
-                                icon = Icons.Default.AddBusiness,
+                                icon = Icons.Rounded.DomainAdd,
+                                useSimpleVectorIcon = true,
+                                isSecondaryAccent = true,
                                 onClick = { subRoute = FormsSubRoute.CLASS_MANAGER }
                             )
                             ServiceMenuCard(
                                 title = "Holiday Calendar Publisher",
                                 subtitle = "Declare Total School, Class-specific or Section-specific holidays",
-                                icon = Icons.Default.EventNote,
+                                icon = Icons.Rounded.CalendarMonth,
+                                useSimpleVectorIcon = true,
+                                isSecondaryAccent = true,
                                 onClick = { subRoute = FormsSubRoute.CALENDAR }
                             )
                             ServiceMenuCard(
                                 title = "Service Request Approvals",
                                 subtitle = "Review and approve pending classroom requests",
-                                icon = Icons.Default.FactCheck,
+                                icon = Icons.Rounded.FactCheck,
+                                useSimpleVectorIcon = true,
+                                isSecondaryAccent = true,
                                 onClick = { subRoute = FormsSubRoute.ADMIN_REVIEW }
                             )
                         }
@@ -3818,13 +4192,16 @@ fun FormsScreen(
                                 ServiceMenuCard(
                                     title = "Sibling Admissions Leads",
                                     subtitle = "Track other-school sibling records & admission offers",
-                                    icon = Icons.Default.FamilyRestroom,
+                                    icon = Icons.Rounded.FamilyRestroom,
+                                    useSimpleVectorIcon = true,
                                     onClick = { subRoute = FormsSubRoute.ADMIN_SIBLINGS }
                                 )
                                 ServiceMenuCard(
                                     title = "Staff & HR Management",
                                     subtitle = "Staff profiles, attendance register & leave approvals",
-                                    icon = Icons.Default.Badge,
+                                    icon = Icons.Rounded.Badge,
+                                    useSimpleVectorIcon = true,
+                                    isSecondaryAccent = true,
                                     onClick = {
                                         staffHrInitialTab = 0
                                         subRoute = FormsSubRoute.STAFF_HR
@@ -3833,7 +4210,9 @@ fun FormsScreen(
                                 ServiceMenuCard(
                                     title = "Staff Leave Applications",
                                     subtitle = "Approve or reject pending staff leave requests",
-                                    icon = Icons.Default.EventBusy,
+                                    icon = Icons.Rounded.EventBusy,
+                                    useSimpleVectorIcon = true,
+                                    isSecondaryAccent = true,
                                     onClick = {
                                         staffHrInitialTab = 2
                                         subRoute = FormsSubRoute.STAFF_HR
@@ -3842,10 +4221,12 @@ fun FormsScreen(
                                 ServiceMenuCard(
                                     title = "Staff Request Approvals",
                                     subtitle = "Review and approve school service requests",
-                                    icon = Icons.Default.FactCheck,
+                                    icon = Icons.Rounded.FactCheck,
+                                    useSimpleVectorIcon = true,
+                                    isSecondaryAccent = true,
                                     onClick = { subRoute = FormsSubRoute.ADMIN_REVIEW }
                                 )
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
 
@@ -3910,90 +4291,112 @@ private fun ReferralTopCard(
     onCopy: () -> Unit,
     onOpenStatusCardGenerator: () -> Unit
 ) {
+    val brand = LocalSchoolBrand.current
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = GenesisColors.MeteorBlack),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenStatusCardGenerator() }
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "PROUD PARENT WHATSAPP STATUS CARD + REFERRAL QR",
-                        color = Color(0xFFFCD34D),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(brand.headerStart, brand.headerEnd)
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Share Achievement Card & ₹5,000 Scholarship QR",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Color(0xFFFBBF24))
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Surface(
-                color = GenesisColors.MeteorSurface,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, GenesisColors.MeteorBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+                )
+        ) {
+            HeaderVectorBackdrop(
+                accentColor = Color(0xFFFCD34D),
+                modifier = Modifier.matchParentSize()
+            )
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = referralCode,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
-                        letterSpacing = 1.sp
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "PROUD PARENT WHATSAPP STATUS CARD + REFERRAL QR",
+                            color = Color(0xFFFCD34D),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Share Achievement Card & ₹5,000 Scholarship QR",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Image(
+                        painter = painterResource(R.drawable.ic_exam_trophy),
+                        contentDescription = "Achievement Trophy",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(44.dp)
                     )
-                    Surface(
-                        color = GenesisColors.Primary,
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.clickable { onCopy() }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    color = Color.White.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Text(
+                            text = referralCode,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = 1.sp
+                        )
+                        Surface(
+                            color = Color.White.copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable { onCopy() }
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.White, modifier = Modifier.size(13.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Copy Code", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", tint = Color.White, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy Code", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-            Button(
-                onClick = onOpenStatusCardGenerator,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
-            ) {
-                Icon(Icons.Default.QrCode2, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Open Branded WhatsApp Status Card + QR", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                Button(
+                    onClick = onOpenStatusCardGenerator,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                ) {
+                    Icon(Icons.Rounded.QrCode2, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open Branded WhatsApp Status Card + QR", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                }
             }
         }
     }
@@ -4004,38 +4407,45 @@ private fun ServiceMenuCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    iconRes: Int? = null,
+    useSimpleVectorIcon: Boolean = true,
+    isSecondaryAccent: Boolean = false,
     onClick: () -> Unit
 ) {
+    val iconBg = if (isSecondaryAccent) Color(0xFFCCFBF1) else GenesisColors.LightBlue
+    val iconFg = if (isSecondaryAccent) GenesisColors.Teal else GenesisColors.Primary
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, GenesisColors.Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 5.dp)
+            .padding(vertical = 6.dp)
             .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(Color(0xFFDBEAFE), RoundedCornerShape(12.dp)),
+                    .background(iconBg, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = title, tint = GenesisColors.Primary, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = title, tint = iconFg, modifier = Modifier.size(22.dp))
             }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextPrimary)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(subtitle, fontSize = 12.sp, color = GenesisColors.TextSecondary)
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = GenesisColors.TextSecondary)
+            Icon(Icons.Rounded.ChevronRight, contentDescription = "Open", tint = GenesisColors.TextSecondary)
         }
     }
 }
