@@ -1,15 +1,16 @@
-# Multi-stage Dockerfile for Genesis School SaaS Go Backend (Cloud Run monorepo root context)
-FROM golang:1.24-alpine AS builder
+# Multi-stage Dockerfile for Genesis School SaaS Go Backend (Cloud Run)
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
+ENV GOTOOLCHAIN=auto
+
 RUN apk add --no-cache git ca-certificates
 
-# Cloud Build runs with repo root as build context when invoked via -f backend-go/Dockerfile .
-COPY backend-go/go.mod backend-go/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY backend-go/ ./
+COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
