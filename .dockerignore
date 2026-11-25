@@ -1,0 +1,13 @@
+# Only send backend-go/ to Docker/Cloud Build context for fast builds
+.git
+.gitignore
+apps/
+backend/
+assets/
+*.log
+*.json
+*.apk
+*.aab
+.DS_Store
+backend-go/server
+backend-go/*.log
