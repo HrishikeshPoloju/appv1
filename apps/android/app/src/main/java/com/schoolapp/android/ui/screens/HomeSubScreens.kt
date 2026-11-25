@@ -385,23 +385,15 @@ fun StudentFirstTimeLoginScreen(
                     RolePortalOption(
                         role = AppRole.STUDENT,
                         title = "Student",
-                        subtitle = "Homework, Timetable, Results & AI Tutor",
+                        subtitle = "Homework, Timetable, Attendance, Results & AI Tutor",
                         icon = Icons.Rounded.School,
                         tint = Color(0xFF2563EB),
                         softBg = Color(0xFFDBEAFE)
                     ),
                     RolePortalOption(
-                        role = AppRole.PARENT,
-                        title = "Parent",
-                        subtitle = "Child Progress, Fees & Daily Updates",
-                        icon = Icons.Rounded.FamilyRestroom,
-                        tint = Color(0xFF0F766E),
-                        softBg = Color(0xFFCCFBF1)
-                    ),
-                    RolePortalOption(
                         role = AppRole.TEACHER,
                         title = "Teacher",
-                        subtitle = "Roll Call, Auto Marks & Class Roster",
+                        subtitle = "Roll Call, Auto Marks, Assignments & Class Roster",
                         icon = Icons.Rounded.MenuBook,
                         tint = Color(0xFF1D4ED8),
                         softBg = Color(0xFFE0E7FF)
@@ -409,87 +401,76 @@ fun StudentFirstTimeLoginScreen(
                     RolePortalOption(
                         role = AppRole.ADMIN,
                         title = "Admin / Principal",
-                        subtitle = "Campus Operations, Staff & Analytics",
+                        subtitle = "Campus Operations, Staff HR, Classes & Analytics",
                         icon = Icons.Rounded.AdminPanelSettings,
                         tint = Color(0xFF0F766E),
                         softBg = Color(0xFFD1FAE5)
                     )
                 )
 
-                roleOptions.chunked(2).forEach { rowItems ->
-                    Row(
+                roleOptions.forEach { opt ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, GenesisColors.Border),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(bottom = 12.dp)
+                            .clickable {
+                                activeRolePortal = opt.role
+                                roleSecretCode = ""
+                                errorMsg = null
+                                authModeTab = 0
+                            }
                     ) {
-                        rowItems.forEach { opt ->
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, GenesisColors.Border),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .clickable {
-                                        activeRolePortal = opt.role
-                                        roleSecretCode = ""
-                                        errorMsg = null
-                                        authModeTab = 0
-                                    }
+                                    .size(48.dp)
+                                    .background(opt.softBg, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(14.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .background(opt.softBg, RoundedCornerShape(12.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = opt.icon,
-                                            contentDescription = opt.title,
-                                            tint = opt.tint,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = opt.title,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GenesisColors.TextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = opt.subtitle,
-                                        fontSize = 11.sp,
-                                        color = GenesisColors.TextSecondary,
-                                        lineHeight = 15.sp,
-                                        minLines = 2
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "Continue",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = opt.tint
-                                        )
-                                        Icon(
-                                            imageVector = Icons.Rounded.ArrowForward,
-                                            contentDescription = null,
-                                            tint = opt.tint,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
+                                Icon(
+                                    imageVector = opt.icon,
+                                    contentDescription = opt.title,
+                                    tint = opt.tint,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = opt.title,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GenesisColors.TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = opt.subtitle,
+                                    fontSize = 12.sp,
+                                    color = GenesisColors.TextSecondary,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(opt.softBg, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ArrowForward,
+                                    contentDescription = "Continue as ${opt.title}",
+                                    tint = opt.tint,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }

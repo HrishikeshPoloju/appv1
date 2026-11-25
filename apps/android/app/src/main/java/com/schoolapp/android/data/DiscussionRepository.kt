@@ -839,6 +839,7 @@ object DiscussionRepository {
         authToken = ""
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean("is_logged_in", false)
+            .putBoolean("role_auth_v2", false)
             .remove("auth_token")
             .remove("user_role")
             .remove("student_id")
@@ -876,6 +877,7 @@ object DiscussionRepository {
         currentRole.value = role
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean("is_logged_in", true)
+            .putBoolean("role_auth_v2", true)
             .putBoolean("is_profile_locked", true)
             .putString("auth_token", token)
             .putString("user_role", role.name)
@@ -2413,7 +2415,12 @@ object DiscussionRepository {
             )
         }
         val loggedIn = prefs.getBoolean("is_logged_in", false)
-        if (!loggedIn) {
+        val hasVerifiedRoleSession = prefs.getBoolean("role_auth_v2", false) && authToken.isNotBlank()
+        if (!loggedIn || !hasVerifiedRoleSession) {
+            if (loggedIn && !hasVerifiedRoleSession) {
+                // Force fresh role-code login for legacy sessions created before role isolation
+                prefs.edit().putBoolean("is_logged_in", false).apply()
+            }
             isStudentLoggedIn.value = false
             return
         }
