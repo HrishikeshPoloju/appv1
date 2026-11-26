@@ -607,6 +607,11 @@ object DiscussionRepository {
     @Volatile
     private var authToken: String = ""
 
+    // In-memory per-launch flag: shows siblings popup only once per app launch if dismissed;
+    // resets automatically only when the app is killed and opened fresh (and only if still not submitted).
+    @Volatile
+    var siblingsPopupDismissedThisLaunch: Boolean = false
+
     /**
      * Opens an HttpURLConnection pre-populated with strict multi-tenant school headers
      * (`x-school-id`, `x-school-slug`, and `Authorization` JWT when logged in)

@@ -137,7 +137,7 @@ fun SchoolHeader(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.AccountCircle,
-                                    contentDescription = "Student Profile",
+                                    contentDescription = "Profile",
                                     tint = Color.White,
                                     modifier = Modifier.size(17.dp)
                                 )
@@ -151,22 +151,6 @@ fun SchoolHeader(
                                     )
                                 }
                             }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(35.dp)
-                                .background(Color.White.copy(alpha = 0.16f), CircleShape)
-                                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
-                                .clickable { onNotificationClick() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.NotificationsNone,
-                                contentDescription = "Notifications",
-                                tint = Color.White,
-                                modifier = Modifier.size(19.dp)
-                            )
                         }
                     }
                 }

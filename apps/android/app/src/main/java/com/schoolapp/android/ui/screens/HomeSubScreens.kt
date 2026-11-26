@@ -2212,6 +2212,48 @@ fun NoticeDetailsScreen(
         notice.expiresAtIso?.takeIf { it.isNotBlank() }?.let { runCatching { Instant.parse(it) }.getOrNull() }
     }
 
+    // Full-screen expandable image viewer state
+    var expandedImageUrl by remember { mutableStateOf<String?>(null) }
+
+    if (expandedImageUrl != null) {
+        Dialog(
+            onDismissRequest = { expandedImageUrl = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.94f))
+                    .clickable { expandedImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = expandedImageUrl,
+                    contentDescription = notice.title,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+                )
+                IconButton(
+                    onClick = { expandedImageUrl = null },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(16.dp)
+                        .size(40.dp)
+                        .background(Color.White.copy(alpha = 0.20f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close Image",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2227,19 +2269,50 @@ fun NoticeDetailsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             notice.imageUrl?.takeIf { it.isNotBlank() }?.let { imgUrl ->
+                val resolvedUrl = DiscussionRepository.resolveRenderableMediaUrl(imgUrl) ?: imgUrl
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expandedImageUrl = resolvedUrl }
                 ) {
-                    AsyncImage(
-                        model = DiscussionRepository.resolveRenderableMediaUrl(imgUrl) ?: imgUrl,
-                        contentDescription = notice.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(210.dp)
-                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AsyncImage(
+                            model = resolvedUrl,
+                            contentDescription = notice.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                        )
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.58f),
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Fullscreen,
+                                    contentDescription = "Expand",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Tap to expand",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2388,81 +2461,6 @@ fun NoticeDetailsScreen(
                         color = GenesisColors.TextPrimary,
                         lineHeight = 22.sp
                     )
-                }
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, GenesisColors.Border),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Place, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Venue: ${notice.venue}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = GenesisColors.TextPrimary)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Schedule, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Time: ${notice.eventTime}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = GenesisColors.TextPrimary)
-                    }
-                }
-            }
-
-            Text("Attachments", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = GenesisColors.Surface),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, GenesisColors.Border),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(Color(0xFFFEE2E2), RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.PictureAsPdf, contentDescription = "PDF", tint = GenesisColors.Emergency)
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(notice.attachmentName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
-                        Text(notice.attachmentSize, fontSize = 12.sp, color = GenesisColors.TextSecondary)
-                    }
-                    IconButton(onClick = {
-                        val saved = generateAndSaveSchoolPdf(
-                            context = context,
-                            fileNameBase = notice.attachmentName.removeSuffix(".pdf"),
-                            documentCategory = "Official School Circular • ${notice.category}",
-                            documentTitle = notice.title,
-                            subtitleLine = "Issued by ${notice.author}  |  ${notice.date}",
-                            metaLines = listOf(
-                                "Venue: ${notice.venue}   •   Schedule: ${notice.eventTime}",
-                                "Audience: ${notice.targetAudience}"
-                            ),
-                            bodyLines = listOf(
-                                notice.content,
-                                "",
-                                "For queries, kindly reach out to the School Administration Desk."
-                            )
-                        )
-                        if (saved != null) {
-                            Toast.makeText(context, "Saved to Downloads/${saved.fileName}", Toast.LENGTH_LONG).show()
-                            openPdfUri(context, saved.openableUri)
-                        }
-                    }) {
-                        Icon(Icons.Rounded.Download, contentDescription = "Download", tint = GenesisColors.Primary)
-                    }
                 }
             }
         }

@@ -5,6 +5,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Rich Royal School Blue Diagonal Gradient -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
@@ -14,15 +15,23 @@
                 android:endY="108"
                 android:type="linear">
                 <item android:offset="0.0" android:color="#0F172A" />
-                <item android:offset="0.55" android:color="#1E40AF" />
+                <item android:offset="0.45" android:color="#1E40AF" />
                 <item android:offset="1.0" android:color="#2563EB" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Subtle concentric glow ring -->
-    <path
-        android:pathData="M54,14 A40,40 0 1,1 53.99,14 Z"
-        android:fillColor="#00000000"
-        android:strokeColor="#22FFFFFF"
-        android:strokeWidth="1.2" />
+    <!-- Soft Top-Left Highlight Sheen -->
+    <path android:pathData="M0,0 L108,0 L108,52 C74,38 34,38 0,58 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="58"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#26FFFFFF" />
+                <item android:offset="1.0" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

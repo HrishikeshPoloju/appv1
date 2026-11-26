@@ -117,14 +117,18 @@ fun HomeScreen(
     var staffHrInitialTab by remember { mutableIntStateOf(0) }
     var selectedNotice by remember { mutableStateOf<AdminNotice?>(null) }
     var showChangeClassDialog by remember { mutableStateOf(false) }
+    var showStaffProfileDialog by remember { mutableStateOf(false) }
     var showSiblingsPopup by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Trigger Sibling popup every time when app is opened after 10 seconds until it submits!
+    // Show Sibling popup at most ONCE per app launch if not yet submitted.
+    // If dismissed, stays dismissed until the app process is killed and opened fresh.
     LaunchedEffect(isSiblingsFormSubmitted) {
-        if (!isSiblingsFormSubmitted) {
+        if (!isSiblingsFormSubmitted && !DiscussionRepository.siblingsPopupDismissedThisLaunch) {
             delay(10_000L)
-            showSiblingsPopup = true
+            if (!isSiblingsFormSubmitted && !DiscussionRepository.siblingsPopupDismissedThisLaunch) {
+                showSiblingsPopup = true
+            }
         }
     }
 
@@ -138,6 +142,70 @@ fun HomeScreen(
     // Ensure hardware Back button inside any Home feature returns to Home Feed instead of exiting app
     BackHandler(enabled = subRoute != HomeSubRoute.FEED) {
         subRoute = HomeSubRoute.FEED
+    }
+
+    if (showStaffProfileDialog) {
+        val activeSchool by DiscussionRepository.activeSchool.collectAsState()
+        val roleTitle = if (currentRole == AppRole.ADMIN) "Admin / Principal" else "Teacher"
+        AlertDialog(
+            onDismissRequest = { showStaffProfileDialog = false },
+            title = {
+                Text(
+                    text = "$roleTitle Profile",
+                    fontWeight = FontWeight.Bold,
+                    color = GenesisColors.TextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = activeStudent.fullName.ifBlank { roleTitle },
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        color = GenesisColors.TextPrimary
+                    )
+                    Text(
+                        text = "${activeSchool.name} (${activeSchool.schoolCode.ifBlank { "SCHOOL" }})",
+                        fontSize = 12.sp,
+                        color = GenesisColors.TextSecondary
+                    )
+                    Text(
+                        text = "Role: $roleTitle",
+                        fontSize = 12.sp,
+                        color = GenesisColors.Primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showStaffProfileDialog = false
+                        DiscussionRepository.logout(context)
+                        Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Emergency)
+                ) {
+                    Text("Sign Out", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (currentRole == AppRole.TEACHER) {
+                        TextButton(onClick = {
+                            showStaffProfileDialog = false
+                            staffHrInitialTab = 0
+                            subRoute = HomeSubRoute.STAFF_HR
+                        }) {
+                            Text("Staff & HR", color = GenesisColors.Primary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    TextButton(onClick = { showStaffProfileDialog = false }) {
+                        Text("Close", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        )
     }
 
     if (showChangeClassDialog) {
@@ -419,7 +487,10 @@ fun HomeScreen(
         }
         HomeSubRoute.FEED -> {
             if (showSiblingsPopup && !isSiblingsFormSubmitted && currentRole != AppRole.ADMIN && currentRole != AppRole.TEACHER) {
-                SiblingsCaptureDialog(onDismiss = { showSiblingsPopup = false })
+                SiblingsCaptureDialog(onDismiss = {
+                    DiscussionRepository.siblingsPopupDismissedThisLaunch = true
+                    showSiblingsPopup = false
+                })
             }
 
             Scaffold(
@@ -471,131 +542,13 @@ fun HomeScreen(
                     schoolName = activeSchool.name.uppercase(),
                     classSectionLabel = headerPillLabel,
                     onProfileClick = {
-                        if (currentRole == AppRole.TEACHER) {
-                            staffHrInitialTab = 0
-                            subRoute = HomeSubRoute.STAFF_HR
+                        if (currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN) {
+                            showStaffProfileDialog = true
                         } else {
                             showChangeClassDialog = true
                         }
-                    },
-                    onNotificationClick = {
-                        selectedNotice = notices.firstOrNull()
-                        if (selectedNotice != null) {
-                            subRoute = HomeSubRoute.NOTICE_DETAILS
-                        }
                     }
                 )
-            }
-
-            // Production Role-Locked Session Bar (strictly isolated by authenticated role + Sign Out)
-            item {
-                val activeSchool by DiscussionRepository.activeSchool.collectAsState()
-                val roleLabel = when (currentRole) {
-                    AppRole.STUDENT -> "Student Portal"
-                    AppRole.PARENT -> "Parent Portal"
-                    AppRole.TEACHER -> "Teacher Portal"
-                    AppRole.ADMIN -> "Admin / Principal Portal"
-                }
-                var showSignOutConfirm by remember { mutableStateOf(false) }
-                if (showSignOutConfirm) {
-                    AlertDialog(
-                        onDismissRequest = { showSignOutConfirm = false },
-                        title = {
-                            Text(
-                                "Sign Out",
-                                fontWeight = FontWeight.Bold,
-                                color = GenesisColors.TextPrimary
-                            )
-                        },
-                        text = {
-                            Text(
-                                "Sign out of ${activeSchool.name} ($roleLabel)? You will need your school's secret code and password to sign back in.",
-                                color = GenesisColors.TextSecondary,
-                                fontSize = 13.sp
-                            )
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    showSignOutConfirm = false
-                                    DiscussionRepository.logout(context)
-                                    Toast.makeText(context, "Signed out successfully", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
-                            ) {
-                                Text("Sign Out", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showSignOutConfirm = false }) {
-                                Text("Cancel", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    )
-                }
-                Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Surface(
-                                color = Color(0xFFDBEAFE),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.VerifiedUser,
-                                    contentDescription = null,
-                                    tint = Color(0xFF2563EB),
-                                    modifier = Modifier
-                                        .padding(6.dp)
-                                        .size(16.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = roleLabel,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GenesisColors.TextPrimary
-                                )
-                                Text(
-                                    text = "${activeSchool.schoolCode.ifBlank { "SCHOOL" }} • Verified Access",
-                                    fontSize = 10.sp,
-                                    color = GenesisColors.TextSecondary
-                                )
-                            }
-                        }
-                        Surface(
-                            color = Color(0xFFF8FAFC),
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(1.dp, GenesisColors.Border),
-                            modifier = Modifier.clickable { showSignOutConfirm = true }
-                        ) {
-                            Text(
-                                text = "Sign Out",
-                                color = GenesisColors.TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
             }
 
             // Principal / School Management Executive ROI Command Center
