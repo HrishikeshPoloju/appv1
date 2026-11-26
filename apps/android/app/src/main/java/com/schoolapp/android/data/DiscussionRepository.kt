@@ -508,7 +508,7 @@ data class LibraryBookItem(
 )
 
 object DiscussionRepository {
-    private const val BASE_URL = "http://10.0.2.2:4000/api/v1"
+    private const val BASE_URL = "https://school-api-569327735820.asia-south1.run.app/api/v1"
     private const val PREFS_NAME = "genesis_student_prefs"
     private val ioScope = CoroutineScope(Dispatchers.IO)
 
