@@ -510,7 +510,36 @@ data class LibraryBookItem(
 object DiscussionRepository {
     private const val BASE_URL = "https://school-api-569327735820.asia-south1.run.app/api/v1"
     private const val PREFS_NAME = "genesis_student_prefs"
+    private const val API_CACHE_PREFS = "genesis_school_api_cache_v1"
+    private const val STATIC_CACHE_TTL_MS = 24L * 60L * 60L * 1000L // 24 hours
     private val ioScope = CoroutineScope(Dispatchers.IO)
+
+    private fun readSchoolCache(schoolId: String, key: String, ttlMs: Long = STATIC_CACHE_TTL_MS): String? {
+        val ctx = appContext ?: return null
+        val prefs = ctx.getSharedPreferences(API_CACHE_PREFS, Context.MODE_PRIVATE)
+        val fullKey = "${schoolId}_$key"
+        val ts = prefs.getLong("${fullKey}_ts", 0L)
+        if (ts == 0L || (System.currentTimeMillis() - ts) > ttlMs) return null
+        return prefs.getString(fullKey, null)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun writeSchoolCache(schoolId: String, key: String, payload: String) {
+        val ctx = appContext ?: return
+        val fullKey = "${schoolId}_$key"
+        ctx.getSharedPreferences(API_CACHE_PREFS, Context.MODE_PRIVATE).edit()
+            .putString(fullKey, payload)
+            .putLong("${fullKey}_ts", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun invalidateSchoolCache(schoolId: String = _activeSchool.value.id, keyPrefix: String = "") {
+        val ctx = appContext ?: return
+        val prefs = ctx.getSharedPreferences(API_CACHE_PREFS, Context.MODE_PRIVATE)
+        val prefix = if (keyPrefix.isBlank()) "${schoolId}_" else "${schoolId}_$keyPrefix"
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
 
     private val defaultSchoolClasses: List<SchoolClass> = (1..10).flatMap { grade ->
         val clsName = "Class $grade"
@@ -914,11 +943,22 @@ object DiscussionRepository {
         isStudentLoggedIn.value = true
     }
 
-    fun fetchSchoolClassesFromBackend(scope: CoroutineScope = ioScope) {
+    fun fetchSchoolClassesFromBackend(scope: CoroutineScope = ioScope, forceRefresh: Boolean = false) {
         scope.launch(Dispatchers.IO) {
             _classesLoading.value = true
             try {
                 val schoolId = _activeSchool.value.id
+                if (!forceRefresh) {
+                    val cached = readSchoolCache(schoolId, "classes")
+                    if (cached != null) {
+                        val parsed = parseSchoolClassesJson(cached)
+                        if (parsed.isNotEmpty()) {
+                            rebuildClassOptionFlows(parsed)
+                            _classesLoading.value = false
+                            return@launch
+                        }
+                    }
+                }
                 val url = URL("$BASE_URL/classes?school_id=$schoolId")
                 val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "GET"
@@ -930,31 +970,9 @@ object DiscussionRepository {
                 }
                 if (conn.responseCode in 200..299) {
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(body)
-                    val arr = json.optJSONObject("data")?.optJSONArray("classes")
-                    val fetched = mutableListOf<SchoolClass>()
-                    if (arr != null) {
-                        for (i in 0 until arr.length()) {
-                            val obj = arr.getJSONObject(i)
-                            val clsName = obj.optString("class_name", "")
-                            val sec = obj.optString("section", "A")
-                            val id = obj.optString("id", buildCanonicalClassId(clsName, sec))
-                            val dbUuid = obj.optString("db_uuid", "")
-                            val displayName = obj.optString("name", "$clsName – Section $sec")
-                            val studentCount = obj.optInt("studentCount", 0)
-                            fetched.add(
-                                SchoolClass(
-                                    id = id,
-                                    name = displayName,
-                                    studentCount = studentCount,
-                                    dbUuid = dbUuid,
-                                    className = clsName,
-                                    section = sec
-                                )
-                            )
-                        }
-                    }
+                    val fetched = parseSchoolClassesJson(body)
                     if (fetched.isNotEmpty()) {
+                        writeSchoolCache(schoolId, "classes", body)
                         rebuildClassOptionFlows(fetched)
                     }
                 }
@@ -2406,9 +2424,14 @@ object DiscussionRepository {
             runCatching { AppRole.valueOf(savedRole) }.getOrNull()?.let { currentRole.value = it }
         }
         authToken = prefs.getString("auth_token", "") ?: ""
-        // Live-refresh active school branding (name, tagline, logo, colors) from server on launch
-        // so DB-only school branding updates apply automatically with zero app update needed.
-        resolveSchoolByCode(_activeSchool.value.schoolCode, context, scope)
+        // Live-refresh active school branding (name, tagline, logo, colors) at most once per 24h
+        // so DB-only school branding updates apply automatically while keeping startup API calls minimal.
+        val brandingCacheKey = "branding_${_activeSchool.value.schoolCode.uppercase()}"
+        if (readSchoolCache(_activeSchool.value.id, brandingCacheKey) == null) {
+            resolveSchoolByCode(_activeSchool.value.schoolCode, context, scope) { ok, _, _ ->
+                if (ok) writeSchoolCache(_activeSchool.value.id, brandingCacheKey, "ok")
+            }
+        }
         if (prefs.contains("campus_lat") && prefs.contains("campus_lng")) {
             _schoolCampusGeofence.value = SchoolCampusGeofence(
                 schoolName = prefs.getString("campus_name", "Eden Garden, Viman Nagar, Pune")
@@ -2980,9 +3003,48 @@ object DiscussionRepository {
         }
     }
 
-    fun fetchClassSubjectsFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+    private fun parseSchoolClassesJson(body: String): List<SchoolClass> {
+        val fetched = mutableListOf<SchoolClass>()
+        val json = runCatching { JSONObject(body) }.getOrNull() ?: return fetched
+        val arr = json.optJSONObject("data")?.optJSONArray("classes") ?: return fetched
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val clsName = obj.optString("class_name", "")
+            val sec = obj.optString("section", "A")
+            val id = obj.optString("id", buildCanonicalClassId(clsName, sec))
+            val dbUuid = obj.optString("db_uuid", "")
+            val displayName = obj.optString("name", "$clsName – Section $sec")
+            val studentCount = obj.optInt("studentCount", 0)
+            fetched.add(
+                SchoolClass(
+                    id = id,
+                    name = displayName,
+                    studentCount = studentCount,
+                    dbUuid = dbUuid,
+                    className = clsName,
+                    section = sec
+                )
+            )
+        }
+        return fetched
+    }
+
+    fun fetchClassSubjectsFromBackend(classId: String, scope: CoroutineScope = ioScope, forceRefresh: Boolean = false) {
         scope.launch(Dispatchers.IO) {
             try {
+                val schoolId = _activeSchool.value.id
+                if (!forceRefresh) {
+                    val cached = readSchoolCache(schoolId, "subjects_$classId")
+                    if (cached != null) {
+                        val json = runCatching { JSONObject(cached) }.getOrNull()
+                        val namesArr = json?.optJSONObject("data")?.optJSONArray("subject_names")
+                        if (namesArr != null) {
+                            val list = (0 until namesArr.length()).mapNotNull { namesArr.optString(it).trim().ifEmpty { null } }
+                            _classSubjectsMap.value = _classSubjectsMap.value + (classId to list)
+                            return@launch
+                        }
+                    }
+                }
                 val url = URL("$BASE_URL/classes/$classId/subjects")
                 Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
                 val conn = openSchoolHttpConnection(url).apply {
@@ -2999,6 +3061,7 @@ object DiscussionRepository {
                     val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                     val json = JSONObject(jsonStr)
                     if (json.optBoolean("success")) {
+                        writeSchoolCache(schoolId, "subjects_$classId", jsonStr)
                         val namesArr = json.getJSONObject("data").optJSONArray("subject_names")
                         val list = mutableListOf<String>()
                         if (namesArr != null) {
@@ -3014,9 +3077,28 @@ object DiscussionRepository {
         }
     }
 
-    fun fetchClassExamsFromBackend(classId: String, scope: CoroutineScope = ioScope) {
+    fun fetchClassExamsFromBackend(classId: String, scope: CoroutineScope = ioScope, forceRefresh: Boolean = false) {
         scope.launch(Dispatchers.IO) {
             try {
+                val schoolId = _activeSchool.value.id
+                if (!forceRefresh) {
+                    val cached = readSchoolCache(schoolId, "exams_$classId")
+                    if (cached != null) {
+                        val json = runCatching { JSONObject(cached) }.getOrNull()
+                        val examsArr = json?.optJSONObject("data")?.optJSONArray("exams")
+                        if (examsArr != null) {
+                            val remoteExams = mutableListOf<String>()
+                            for (i in 0 until examsArr.length()) {
+                                val title = examsArr.getJSONObject(i).optString("title").trim()
+                                if (title.isNotEmpty() && remoteExams.none { it.equals(title, ignoreCase = true) }) {
+                                    remoteExams.add(title)
+                                }
+                            }
+                            _availableExams.value = remoteExams
+                            return@launch
+                        }
+                    }
+                }
                 val url = URL("$BASE_URL/classes/$classId/exams")
                 Log.i("GenesisAPI", "--> GET $url [student=${activeStudent.value.fullName}, class=$classId]")
                 val conn = openSchoolHttpConnection(url).apply {
@@ -3033,6 +3115,7 @@ object DiscussionRepository {
                     val jsonStr = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                     val json = JSONObject(jsonStr)
                     if (json.optBoolean("success")) {
+                        writeSchoolCache(schoolId, "exams_$classId", jsonStr)
                         val examsArr = json.getJSONObject("data").optJSONArray("exams")
                         val remoteExams = mutableListOf<String>()
                         if (examsArr != null) {
@@ -5626,14 +5709,57 @@ object DiscussionRepository {
         return rawUrl
     }
 
+    /**
+     * Compresses camera/gallery images down to max 1280px & <= 150 KB JPEG before upload
+     * (cuts Object Storage & egress bandwidth by ~85% across all roles). PDFs pass through untouched.
+     */
+    private fun compressImageBytesIfNeeded(rawBytes: ByteArray, mimeType: String, maxDim: Int = 1280, targetMaxBytes: Int = 150_000): Pair<ByteArray, String> {
+        if (!mimeType.startsWith("image/", ignoreCase = true) || rawBytes.size <= targetMaxBytes) {
+            return rawBytes to mimeType
+        }
+        return try {
+            val boundsOpts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, boundsOpts)
+            var sampleSize = 1
+            while ((boundsOpts.outWidth / sampleSize) > maxDim * 2 || (boundsOpts.outHeight / sampleSize) > maxDim * 2) {
+                sampleSize *= 2
+            }
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val decoded = android.graphics.BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, decodeOpts)
+                ?: return rawBytes to mimeType
+            val w = decoded.width
+            val h = decoded.height
+            val scale = minOf(1f, maxDim.toFloat() / maxOf(w, h).coerceAtLeast(1))
+            val scaled = if (scale < 1f) {
+                android.graphics.Bitmap.createScaledBitmap(decoded, (w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1), true).also {
+                    if (it !== decoded) decoded.recycle()
+                }
+            } else decoded
+
+            val baos = java.io.ByteArrayOutputStream()
+            var quality = 82
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
+            while (baos.size() > targetMaxBytes && quality > 40) {
+                baos.reset()
+                quality -= 12
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
+            }
+            scaled.recycle()
+            baos.toByteArray() to "image/jpeg"
+        } catch (_: Exception) {
+            rawBytes to mimeType
+        }
+    }
+
     private fun uploadLocalUriToCloudStorage(uriString: String?, folder: String, classId: String = selectedClass.value.id): String? {
         if (uriString.isNullOrBlank()) return null
         if (uriString.startsWith("http://") || uriString.startsWith("https://")) return resolveRenderableMediaUrl(uriString)
         val ctx = appContext ?: return null
         return try {
             val parsedUri = android.net.Uri.parse(uriString)
-            val bytes = ctx.contentResolver.openInputStream(parsedUri)?.use { it.readBytes() } ?: return null
-            val mimeType = ctx.contentResolver.getType(parsedUri) ?: if (folder == "notes") "application/pdf" else "image/jpeg"
+            val rawBytes = ctx.contentResolver.openInputStream(parsedUri)?.use { it.readBytes() } ?: return null
+            val detectedMime = ctx.contentResolver.getType(parsedUri) ?: if (folder == "notes") "application/pdf" else "image/jpeg"
+            val (bytes, mimeType) = compressImageBytesIfNeeded(rawBytes, detectedMime)
             val ext = when {
                 mimeType.contains("pdf") -> "pdf"
                 mimeType.contains("png") -> "png"

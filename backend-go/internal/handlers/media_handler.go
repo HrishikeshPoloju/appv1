@@ -13,11 +13,11 @@ import (
 )
 
 type MediaHandler struct {
-	storage *storage.StorageService
+	storage storage.ObjectStore
 }
 
-func NewMediaHandler(storage *storage.StorageService) *MediaHandler {
-	return &MediaHandler{storage: storage}
+func NewMediaHandler(store storage.ObjectStore) *MediaHandler {
+	return &MediaHandler{storage: store}
 }
 
 func (h *MediaHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
@@ -68,38 +68,42 @@ func (h *MediaHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/pdf"
 	}
 
-	// Stream upload directly to Google Cloud Storage
-	objectKey, gcsURL, err := h.storage.UploadStream(r.Context(), structuredFolder, header.Filename, file, contentType)
+	// Stream upload directly to configured Object Storage (GCS or Cloudflare R2)
+	objectKey, directURL, err := h.storage.UploadStream(r.Context(), structuredFolder, header.Filename, file, contentType)
 	if err != nil {
 		sendJSON(w, http.StatusInternalServerError, models.ApiResponse{
 			Success: false,
-			Error:   "Cloud Storage upload failed: " + err.Error(),
+			Error:   "Storage upload failed: " + err.Error(),
 		})
 		return
 	}
 
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
+	viewURL := directURL
+	if !h.storage.HasDirectPublicURL() {
+		scheme := "http"
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			scheme = "https"
+		}
+		viewURL = fmt.Sprintf("%s://%s/api/v1/media/view?key=%s", scheme, r.Host, url.QueryEscape(objectKey))
 	}
-	viewURL := fmt.Sprintf("%s://%s/api/v1/media/view?key=%s", scheme, r.Host, url.QueryEscape(objectKey))
 
 	sendJSON(w, http.StatusOK, models.ApiResponse{
 		Success: true,
 		Data: map[string]interface{}{
 			"url":          viewURL,
-			"gcs_url":      gcsURL,
+			"gcs_url":      directURL,
 			"object_key":   objectKey,
 			"folder":       structuredFolder,
 			"filename":     header.Filename,
 			"content_type": contentType,
 			"size_bytes":   header.Size,
-			"status":       "stored_in_gcs",
+			"provider":     h.storage.ProviderName(),
+			"status":       "stored_in_" + h.storage.ProviderName(),
 		},
 	})
 }
 
-// ViewFile streams a private Google Cloud Storage object directly to the mobile/web client.
+// ViewFile streams an object from Object Storage with 30-day immutable HTTP caching + ETag 304 support.
 func (h *MediaHandler) ViewFile(w http.ResponseWriter, r *http.Request) {
 	objectKey := strings.TrimSpace(r.URL.Query().Get("key"))
 	if objectKey == "" {
@@ -107,19 +111,22 @@ func (h *MediaHandler) ViewFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reader, err := h.storage.OpenReader(r.Context(), objectKey)
+	rc, contentType, etag, err := h.storage.OpenStream(r.Context(), objectKey)
 	if err != nil {
-		http.Error(w, "File not found in Cloud Storage", http.StatusNotFound)
+		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-	defer reader.Close()
+	defer rc.Close()
 
-	if ct := reader.Attrs.ContentType; ct != "" {
-		w.Header().Set("Content-Type", ct)
-	} else {
-		w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=2592000, immutable")
+	if etag != "" {
+		w.Header().Set("ETag", etag)
+		if match := strings.TrimSpace(r.Header.Get("If-None-Match")); match != "" && match == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
 	}
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, reader)
+	_, _ = io.Copy(w, rc)
 }

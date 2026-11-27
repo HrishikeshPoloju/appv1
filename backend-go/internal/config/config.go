@@ -12,6 +12,12 @@ type Config struct {
 	GCPProjectID           string
 	GCSBucketName          string
 	GoogleAppCredentials   string
+	StorageProvider        string // "gcs" (default) or "r2" (Cloudflare R2 zero-egress)
+	R2AccountID            string
+	R2AccessKeyID          string
+	R2SecretAccessKey      string
+	R2BucketName           string
+	R2PublicBaseURL        string
 	JWTSecret              string
 	Environment            string
 	AllowedOrigins         []string
@@ -69,6 +75,11 @@ func Load() *Config {
 		origins = strings.Split(corsEnv, ",")
 	}
 
+	storageProvider := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER")))
+	if storageProvider == "" {
+		storageProvider = "gcs"
+	}
+
 	return &Config{
 		Port:                   port,
 		DatabaseURL:            dbURL,
@@ -76,6 +87,12 @@ func Load() *Config {
 		GCPProjectID:           projectID,
 		GCSBucketName:          bucketName,
 		GoogleAppCredentials:   credsPath,
+		StorageProvider:        storageProvider,
+		R2AccountID:            strings.TrimSpace(os.Getenv("R2_ACCOUNT_ID")),
+		R2AccessKeyID:          strings.TrimSpace(os.Getenv("R2_ACCESS_KEY_ID")),
+		R2SecretAccessKey:      strings.TrimSpace(os.Getenv("R2_SECRET_ACCESS_KEY")),
+		R2BucketName:           strings.TrimSpace(os.Getenv("R2_BUCKET_NAME")),
+		R2PublicBaseURL:        strings.TrimRight(strings.TrimSpace(os.Getenv("R2_PUBLIC_BASE_URL")), "/"),
 		JWTSecret:              jwtSecret,
 		Environment:            env,
 		AllowedOrigins:         origins,

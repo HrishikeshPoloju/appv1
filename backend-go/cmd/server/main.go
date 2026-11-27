@@ -48,10 +48,20 @@ func main() {
 		}
 	}
 
-	// Initialize Google Cloud Storage client
-	gcsStorage, err := storage.NewStorageService(ctx, cfg.GCPProjectID, cfg.GCSBucketName, cfg.GoogleAppCredentials)
+	// Initialize Object Storage (GCS by default; flip STORAGE_PROVIDER=r2 for zero-egress Cloudflare R2)
+	objectStore, err := storage.NewObjectStore(ctx, storage.StoreConfig{
+		Provider:          cfg.StorageProvider,
+		GCPProjectID:      cfg.GCPProjectID,
+		GCSBucketName:     cfg.GCSBucketName,
+		GoogleCredentials: cfg.GoogleAppCredentials,
+		R2AccountID:       cfg.R2AccountID,
+		R2AccessKeyID:     cfg.R2AccessKeyID,
+		R2SecretAccessKey: cfg.R2SecretAccessKey,
+		R2BucketName:      cfg.R2BucketName,
+		R2PublicBaseURL:   cfg.R2PublicBaseURL,
+	})
 	if err != nil {
-		slog.Warn("GCS service initialized in offline/fallback mode", "error", err)
+		slog.Warn("Object storage initialized in offline/fallback mode", "provider", cfg.StorageProvider, "error", err)
 	}
 
 	// Initialize Firebase Cloud Messaging (FREE unlimited push notifications for Notices)
@@ -69,7 +79,7 @@ func main() {
 	academicHandler := handlers.NewAcademicHandler(db)
 	attendanceHandler := handlers.NewAttendanceHandler(db)
 	examHandler := handlers.NewExamHandler(db)
-	mediaHandler := handlers.NewMediaHandler(gcsStorage)
+	mediaHandler := handlers.NewMediaHandler(objectStore)
 	referralHandler := handlers.NewReferralHandler(db)
 	teacherHandler := handlers.NewTeacherHandler(db)
 	schoolHandler := handlers.NewSchoolHandler(db, authMiddleware)
