@@ -824,26 +824,6 @@ fun StudentFirstTimeLoginScreen(
                                 AppRole.TEACHER -> {
                                     Spacer(modifier = Modifier.height(14.dp))
                                     Text(
-                                        text = "Employee / Staff ID *",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = GenesisColors.TextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    OutlinedTextField(
-                                        value = employeeId,
-                                        onValueChange = {
-                                            employeeId = it.uppercase().take(24)
-                                            errorMsg = null
-                                        },
-                                        placeholder = { Text("e.g. TCH-104", fontSize = 13.sp) },
-                                        leadingIcon = { Icon(Icons.Rounded.Badge, contentDescription = null, tint = brandColor) },
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    Text(
                                         text = "Department / Primary Subject *",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
@@ -1158,8 +1138,8 @@ fun StudentFirstTimeLoginScreen(
                                         role == AppRole.PARENT && childName.trim().length < 2 -> {
                                             errorMsg = "Please enter your child's full name."
                                         }
-                                        role == AppRole.TEACHER && (employeeId.trim().isEmpty() || department.trim().isEmpty()) -> {
-                                            errorMsg = "Please enter your Employee ID and Department / Subject."
+                                        role == AppRole.TEACHER && department.trim().isEmpty() -> {
+                                            errorMsg = "Please enter your Department / Subject."
                                         }
                                         role == AppRole.ADMIN && !parentEmail.contains("@") -> {
                                             errorMsg = "Please enter a valid Official School Email."

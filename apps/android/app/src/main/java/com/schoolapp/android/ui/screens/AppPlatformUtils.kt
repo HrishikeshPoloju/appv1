@@ -1536,206 +1536,246 @@ fun ClassSectionDropdownButton(
         }
     }
 
+    // Group availableClasses cleanly by Class Name -> list of SchoolClass (sections)
+    val groupedByClass = remember(availableClasses) {
+        val map = linkedMapOf<String, MutableList<SchoolClass>>()
+        availableClasses.forEach { sc ->
+            val cName = sc.className.ifBlank { sc.name.substringBefore("–").trim() }
+            map.getOrPut(cName) { mutableListOf() }.add(sc)
+        }
+        map
+    }
+    val currentClassName = selectedClass.className.ifBlank { selectedClass.name.substringBefore("–").trim() }
+    val currentSectionName = selectedClass.section.ifBlank { selectedClass.name.substringAfter("Section", "A").trim() }
+    val sectionsForClass = groupedByClass[currentClassName].orEmpty()
+
+    var classMenuExpanded by remember { mutableStateOf(false) }
+    var sectionMenuExpanded by remember { mutableStateOf(false) }
+    val activeRole by DiscussionRepository.currentRole.collectAsState()
+
     Column(modifier = modifier) {
         if (!label.isNullOrBlank()) {
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = GenesisColors.TextSecondary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GenesisColors.TextSecondary
+                )
+                if (!badgeText.isNullOrBlank()) {
+                    Surface(color = Color(0xFFF59E0B), shape = RoundedCornerShape(999.dp)) {
+                        Text(
+                            text = badgeText,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(6.dp))
         }
 
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Surface(
-                color = Color.White,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.5.dp, GenesisColors.Primary),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = true }
-            ) {
-                Row(
+        // Clean 2-Dropdown Row: Dropdown 1 = Class, Dropdown 2 = Section
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Dropdown 1: Class
+            Box(modifier = Modifier.weight(1.25f)) {
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.2.dp, GenesisColors.Primary.copy(alpha = 0.65f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable { classMenuExpanded = true }
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            color = GenesisColors.Primary.copy(alpha = 0.1f),
-                            shape = CircleShape,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.School,
-                                    contentDescription = null,
-                                    tint = GenesisColors.Primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Class", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextSecondary)
                             Text(
-                                text = selectedClass.name,
+                                text = currentClassName,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = GenesisColors.TextPrimary
+                                color = GenesisColors.TextPrimary,
+                                maxLines = 1
                             )
-                            Text(
-                                text = "${selectedClass.studentCount} Students Enrolled",
-                                fontSize = 11.sp,
-                                color = GenesisColors.TextSecondary
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (!badgeText.isNullOrBlank()) {
-                            Surface(
-                                color = Color(0xFFF59E0B),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Text(
-                                    text = badgeText,
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
                         }
                         Icon(
-                            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Dropdown",
+                            imageVector = if (classMenuExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Select Class",
                             tint = GenesisColors.Primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = classMenuExpanded,
+                    onDismissRequest = { classMenuExpanded = false },
+                    modifier = Modifier.background(Color.White)
+                ) {
+                    Text(
+                        text = "SELECT CLASS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.TextSecondary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                    HorizontalDivider(color = GenesisColors.Border, thickness = 0.5.dp)
+                    groupedByClass.keys.forEach { clsName ->
+                        val isSel = clsName.equals(currentClassName, ignoreCase = true)
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = clsName,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSel) GenesisColors.Primary else GenesisColors.TextPrimary,
+                                    fontSize = 14.sp
+                                )
+                            },
+                            trailingIcon = if (isSel) {
+                                { Icon(Icons.Default.Check, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            onClick = {
+                                classMenuExpanded = false
+                                val list = groupedByClass[clsName].orEmpty()
+                                val match = list.find { it.section.equals(currentSectionName, ignoreCase = true) } ?: list.firstOrNull()
+                                if (match != null) onClassSelected(match)
+                            }
                         )
                     }
                 }
             }
 
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .background(Color.White)
-            ) {
-                Text(
-                    text = "SELECT CLASS & SECTION",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GenesisColors.TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-                HorizontalDivider(color = GenesisColors.Border, thickness = 0.5.dp)
-                availableClasses.forEach { cls ->
-                    val isSelected = cls.id == selectedClass.id
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = cls.name,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) GenesisColors.Primary else GenesisColors.TextPrimary,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "${cls.studentCount} students",
-                                    fontSize = 12.sp,
-                                    color = GenesisColors.TextSecondary
-                                )
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.School,
-                                contentDescription = null,
-                                tint = if (isSelected) GenesisColors.Primary else GenesisColors.TextSecondary,
-                                modifier = Modifier.size(18.dp)
+            // Dropdown 2: Section
+            Box(modifier = Modifier.weight(1f)) {
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.2.dp, GenesisColors.Teal.copy(alpha = 0.65f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { sectionMenuExpanded = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Section", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = GenesisColors.TextSecondary)
+                            Text(
+                                text = "Sec $currentSectionName",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = GenesisColors.TextPrimary,
+                                maxLines = 1
                             )
-                        },
-                        trailingIcon = if (isSelected) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Selected",
-                                    tint = GenesisColors.Primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        } else null,
-                        onClick = {
-                            onClassSelected(cls)
-                            expanded = false
                         }
-                    )
+                        Icon(
+                            imageVector = if (sectionMenuExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Select Section",
+                            tint = GenesisColors.Teal,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
-                val activeRole by DiscussionRepository.currentRole.collectAsState()
-                if (allowClassManagement) {
+                DropdownMenu(
+                    expanded = sectionMenuExpanded,
+                    onDismissRequest = { sectionMenuExpanded = false },
+                    modifier = Modifier.background(Color.White)
+                ) {
+                    Text(
+                        text = "SELECT SECTION",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GenesisColors.TextSecondary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
                     HorizontalDivider(color = GenesisColors.Border, thickness = 0.5.dp)
-                    if (activeRole == com.schoolapp.android.data.AppRole.ADMIN) {
+                    sectionsForClass.forEach { sc ->
+                        val secLabel = sc.section.ifBlank { sc.name.substringAfter("Section", "A").trim() }
+                        val isSel = sc.id == selectedClass.id
                         DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.AddCircleOutline,
-                                    contentDescription = null,
-                                    tint = GenesisColors.Primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
                             text = {
-                                Text(
-                                    text = "➕ Create New Class or Section (Admin)",
-                                    color = GenesisColors.Primary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Section $secLabel",
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSel) GenesisColors.Teal else GenesisColors.TextPrimary,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "${sc.studentCount}",
+                                        fontSize = 11.sp,
+                                        color = GenesisColors.TextSecondary
+                                    )
+                                }
                             },
+                            trailingIcon = if (isSel) {
+                                { Icon(Icons.Default.Check, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(16.dp)) }
+                            } else null,
                             onClick = {
-                                expanded = false
-                                newClassNameInput = "Class 10"
-                                newSectionInput = "A"
-                                showCreateClassDialog = true
+                                sectionMenuExpanded = false
+                                onClassSelected(sc)
                             }
                         )
                     }
-                    DropdownMenuItem(
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.MenuBook,
-                                contentDescription = null,
-                                tint = GenesisColors.Primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = "📚 Manage Subjects for ${selectedClass.name}",
-                                color = GenesisColors.Primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        },
+                }
+            }
+        }
+
+        if (allowClassManagement) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (activeRole == com.schoolapp.android.data.AppRole.ADMIN) {
+                    TextButton(
                         onClick = {
-                            expanded = false
-                            newSubjectInput = ""
-                            showManageSubjectsDialog = true
-                        }
-                    )
+                            newClassNameInput = "Class 10"
+                            newSectionInput = "A"
+                            showCreateClassDialog = true
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New Class/Section", color = GenesisColors.Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        newSubjectInput = ""
+                        showManageSubjectsDialog = true
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.MenuBook, contentDescription = null, tint = GenesisColors.Teal, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Subjects", color = GenesisColors.Teal, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

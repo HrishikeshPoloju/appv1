@@ -3881,7 +3881,7 @@ object DiscussionRepository {
         }
     }
 
-    fun addOrUpdateHomework(item: HomeworkItem) {
+    fun addOrUpdateHomework(item: HomeworkItem, localMediaUri: String? = null) {
         val existingIndex = _homeworkList.value.indexOfFirst { it.id == item.id }
         if (existingIndex >= 0) {
             val updated = _homeworkList.value.toMutableList()
@@ -3893,14 +3893,17 @@ object DiscussionRepository {
 
         ioScope.launch {
             try {
+                val uploadedUrl = if (!localMediaUri.isNullOrBlank()) {
+                    uploadLocalUriToCloudStorage(localMediaUri, "homework", item.classId)
+                } else null
                 val url = URL("$BASE_URL/classes/${item.classId}/homework")
                 val conn = openSchoolHttpConnection(url).apply {
                     requestMethod = "POST"
-                    connectTimeout = 3000
-                    readTimeout = 3000
+                    connectTimeout = 5000
+                    readTimeout = 5000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("x-user-role", "TEACHER")
+                    setRequestProperty("x-user-role", currentRole.value.name)
                 }
                 val payload = JSONObject().apply {
                     put("class_ids", JSONArray().put(item.classId))
@@ -3908,10 +3911,78 @@ object DiscussionRepository {
                     put("title", item.title)
                     put("description", item.instructions)
                     put("due_date", item.dueText)
+                    if (!uploadedUrl.isNullOrBlank()) {
+                        put("attachments", JSONArray().put(uploadedUrl))
+                    }
                 }
                 OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
                 conn.responseCode
             } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Allows a Teacher or Admin to register a Student (with phone + password) directly into PostgreSQL
+     * so the student can later download the app and sign in — WITHOUT logging out the Teacher/Admin.
+     */
+    fun registerStudentByTeacher(
+        fullName: String,
+        className: String,
+        section: String,
+        parentPhone: String,
+        password: String,
+        parentEmail: String = "",
+        address: String = "",
+        scope: CoroutineScope = ioScope,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$BASE_URL/auth/register")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-created-by-staff", "true")
+                }
+                val payload = JSONObject().apply {
+                    put("school_code", _activeSchool.value.schoolCode.ifBlank { "GENESIS" })
+                    put("role", "STUDENT")
+                    put("full_name", fullName.trim())
+                    put("phone", parentPhone.trim())
+                    put("password", password)
+                    put("class_name", className.trim())
+                    put("section", section.trim())
+                    put("parent_phone", parentPhone.trim())
+                    put("parent_email", parentEmail.trim())
+                    put("address", address.trim())
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val json = runCatching { JSONObject(body) }.getOrNull()
+                if (code in 200..299 && json != null && json.optBoolean("success")) {
+                    addStudentToSectionRoster(
+                        fullName = fullName.trim(),
+                        rollNo = "",
+                        className = className.trim(),
+                        section = section.trim(),
+                        parentPhone = parentPhone.trim()
+                    )
+                    withContext(Dispatchers.Main) {
+                        onResult(true, "Student account created! They can now sign in with mobile & password.")
+                    }
+                } else {
+                    val err = json?.optString("error").orEmpty().ifBlank { "Could not create student account." }
+                    withContext(Dispatchers.Main) { onResult(false, err) }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) { onResult(false, "Network error. Please try again.") }
+            }
         }
     }
 
@@ -4915,6 +4986,60 @@ object DiscussionRepository {
                 conn.responseCode
             } catch (_: Exception) {}
         }
+    }
+
+    fun applyStaffLeaveDates(
+        staffId: String,
+        leaveType: String,
+        selectedDatesIso: List<String>,
+        reason: String
+    ): StaffLeaveRequest {
+        val sorted = selectedDatesIso.sorted()
+        val from = sorted.firstOrNull() ?: "Today"
+        val to = if (sorted.size > 1) "${sorted.last()} (${sorted.size} dates)" else from
+        val staff = _staffDirectory.value.find { it.id == staffId }
+        val safeDays = sorted.size.coerceAtLeast(1)
+        val tempId = "slv-${System.currentTimeMillis()}"
+        val request = StaffLeaveRequest(
+            id = tempId,
+            staffId = staffId,
+            staffName = staff?.name ?: activeStudent.value.fullName.ifBlank { "Teacher" },
+            leaveType = leaveType,
+            fromDate = from,
+            toDate = to,
+            days = safeDays,
+            reason = reason.trim().ifBlank { "Planned $leaveType" },
+            status = "Pending",
+            appliedOn = "Today"
+        )
+        _staffLeaveRequests.value = listOf(request) + _staffLeaveRequests.value
+
+        ioScope.launch {
+            try {
+                val url = URL("$BASE_URL/staff/leaves")
+                val conn = openSchoolHttpConnection(url).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("x-user-role", currentRole.value.name)
+                    setRequestProperty("x-teacher-name", request.staffName)
+                }
+                val payload = JSONObject().apply {
+                    put("staff_id", staffId)
+                    put("staff_name", request.staffName)
+                    put("leave_type", leaveType)
+                    put("from_date", sorted.joinToString(", "))
+                    put("to_date", sorted.lastOrNull() ?: from)
+                    put("days", safeDays)
+                    put("reason", request.reason)
+                }
+                OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
+        return request
     }
 
     fun applyStaffLeave(

@@ -238,6 +238,46 @@ fun AttendanceHubScreen(
         }
     }
 
+    // Local confirmation popup for "Mark All Present" (0 API calls until confirmed)
+    var showMarkAllPresentConfirm by remember { mutableStateOf(false) }
+    var isRetakingAttendance by remember(currentClass.id) { mutableStateOf(false) }
+    val alreadySubmittedToday = submissionTime != null && !isRetakingAttendance
+
+    if (showMarkAllPresentConfirm) {
+        AlertDialog(
+            onDismissRequest = { showMarkAllPresentConfirm = false },
+            title = { Text("Mark All Present?", fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary) },
+            text = {
+                Text(
+                    "Do you want to mark all ${classRoster.size} students in ${currentClass.name} as Present?",
+                    fontSize = 13.sp,
+                    color = GenesisColors.TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showMarkAllPresentConfirm = false
+                        DiscussionRepository.markAllPresentInClass(currentClass.id)
+                        Toast.makeText(
+                            context,
+                            "Marked all ${classRoster.size} students in ${currentClass.name} Present.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Success)
+                ) {
+                    Text("Confirm & Continue", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMarkAllPresentConfirm = false }) {
+                    Text("Cancel", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -313,31 +353,61 @@ fun AttendanceHubScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
                                 AttendanceMetricPill("Present", presentCount.toString(), Color(0xFF22C55E))
                                 AttendanceMetricPill("Absent", absentCount.toString(), Color(0xFFEF4444))
-                                AttendanceMetricPill("Leave", leaveCount.toString(), Color(0xFFF59E0B))
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = {
-                                    DiscussionRepository.markAllPresentInClass(currentClass.id)
-                                    Toast.makeText(
-                                        context,
-                                        "Marked all ${classRoster.size} students in ${currentClass.name} Present.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Success)
-                            ) {
-                                Icon(Icons.Default.DoneAll, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Mark All Present", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            if (alreadySubmittedToday) {
+                                Surface(
+                                    color = Color(0xFF14532D),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Attendance Already Taken Today",
+                                                color = Color(0xFF86EFAC),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                            Text(
+                                                text = "Submitted at $submissionTime",
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { isRetakingAttendance = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                                        ) {
+                                            Text("Retake", color = Color(0xFF14532D), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = { showMarkAllPresentConfirm = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Success)
+                                ) {
+                                    Icon(Icons.Default.DoneAll, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Mark All Present", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
                         }
                     }
@@ -384,11 +454,10 @@ fun AttendanceHubScreen(
                                 Text(entry.studentName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(entry.parentPhone, fontSize = 12.sp, color = GenesisColors.TextSecondary)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf(
                                     Triple("P", "Present", GenesisColors.Success),
-                                    Triple("A", "Absent", GenesisColors.Emergency),
-                                    Triple("Lv", "Leave", GenesisColors.Warning)
+                                    Triple("A", "Absent", GenesisColors.Emergency)
                                 ).forEach { (shortCode, statusValue, activeColor) ->
                                     val selected = entry.status == statusValue
                                     Surface(
@@ -396,8 +465,8 @@ fun AttendanceHubScreen(
                                         shape = RoundedCornerShape(8.dp),
                                         border = BorderStroke(1.dp, if (selected) activeColor else GenesisColors.Border),
                                         modifier = Modifier
-                                            .size(36.dp)
-                                            .clickable {
+                                            .size(40.dp)
+                                            .clickable(enabled = !alreadySubmittedToday) {
                                                 DiscussionRepository.markStudentAttendance(entry.id, statusValue)
                                             }
                                     ) {
@@ -406,7 +475,7 @@ fun AttendanceHubScreen(
                                                 text = shortCode,
                                                 color = if (selected) Color.White else GenesisColors.TextSecondary,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp
+                                                fontSize = 13.sp
                                             )
                                         }
                                     }
@@ -527,24 +596,26 @@ fun AttendanceHubScreen(
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = {
-                            showConfirmDialog = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
-                    ) {
-                        Icon(Icons.Default.Verified, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Submit Attendance for ${currentClass.name}",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+                    if (!alreadySubmittedToday) {
+                        Button(
+                            onClick = {
+                                showConfirmDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                        ) {
+                            Icon(Icons.Default.Verified, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Submit Attendance for ${currentClass.name}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
                 }
@@ -2278,7 +2349,95 @@ fun AssignmentsAndProjectsScreen(onBack: () -> Unit) {
         var dueText by remember { mutableStateOf(editingItem?.dueText ?: "Due 25 Oct 2026, 08:30 AM") }
         var instructions by remember { mutableStateOf(editingItem?.instructions ?: "") }
         var maxMarksStr by remember { mutableStateOf((editingItem?.maxMarks ?: 20).toString()) }
-        var attachedDocName by remember { mutableStateOf(editingItem?.attachedDocName ?: "Worksheet_Guide.pdf") }
+        var attachedDocName by remember { mutableStateOf(editingItem?.attachedDocName ?: "") }
+        var selectedPdfUri by remember { mutableStateOf<Uri?>(null) }
+        var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+        var showConfirmAssign by remember { mutableStateOf(false) }
+
+        val pdfPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                selectedPdfUri = uri
+                attachedDocName = uri.lastPathSegment?.substringAfterLast("/") ?: "Assignment.pdf"
+            }
+        }
+        val multiImagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+            if (uris.isNotEmpty()) {
+                selectedImageUris = (selectedImageUris + uris).distinct().take(6)
+                if (attachedDocName.isBlank()) {
+                    attachedDocName = "${selectedImageUris.size} attached photo(s)"
+                }
+            }
+        }
+        val openEndDatePicker = {
+            val parts = deadlineIso.split("-")
+            val y = parts.getOrNull(0)?.toIntOrNull() ?: 2026
+            val m = (parts.getOrNull(1)?.toIntOrNull() ?: 11) - 1
+            val d = parts.getOrNull(2)?.toIntOrNull() ?: 28
+            android.app.DatePickerDialog(context, { _, year, month, dayOfMonth ->
+                val iso = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                deadlineIso = iso
+                dueText = "Due $iso"
+            }, y, m, d).show()
+        }
+
+        if (showConfirmAssign) {
+            AlertDialog(
+                onDismissRequest = { showConfirmAssign = false },
+                title = { Text("Publish Assignment?", fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary) },
+                text = {
+                    Text(
+                        "Publish \"${title.trim()}\" (Max Marks: ${maxMarksStr.ifBlank { "20" }}, End Date: $deadlineIso) to students?",
+                        fontSize = 13.sp,
+                        color = GenesisColors.TextSecondary
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showConfirmAssign = false
+                            val maxM = maxMarksStr.toIntOrNull() ?: 20
+                            val summaryDoc = buildString {
+                                if (selectedPdfUri != null) append(attachedDocName.ifBlank { "Assignment.pdf" })
+                                if (selectedImageUris.isNotEmpty()) {
+                                    if (isNotEmpty()) append(" + ")
+                                    append("${selectedImageUris.size} Photo(s)")
+                                }
+                                if (isEmpty() && attachedDocName.isNotBlank()) append(attachedDocName.trim())
+                            }.ifBlank { null }
+                            val newItem = HomeworkItem(
+                                id = editingItem?.id ?: "hw-${System.currentTimeMillis()}",
+                                classId = currentClassFilter,
+                                subject = subject.trim(),
+                                title = title.trim(),
+                                dueText = dueText.trim().ifBlank { "Due $deadlineIso" },
+                                status = "Pending",
+                                instructions = instructions.trim(),
+                                maxMarks = maxM,
+                                deadlineDateIso = deadlineIso.trim(),
+                                totalStudents = editingItem?.totalStudents ?: 40,
+                                submittedCount = editingItem?.submittedCount ?: 0,
+                                attachedDocName = summaryDoc,
+                                attachedDocSize = if (selectedPdfUri != null || selectedImageUris.isNotEmpty()) "Attached" else null,
+                                projectType = projectType
+                            )
+                            val primaryLocalUri = selectedPdfUri?.toString() ?: selectedImageUris.firstOrNull()?.toString()
+                            DiscussionRepository.addOrUpdateHomework(newItem, primaryLocalUri)
+                            Toast.makeText(context, if (editingItem != null) "Assignment updated!" else "Assignment published!", Toast.LENGTH_SHORT).show()
+                            showAddDialog = false
+                            showModifyDialog = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                    ) {
+                        Text("Confirm & Publish", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmAssign = false }) {
+                        Text("Check Again", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            )
+        }
 
         Dialog(onDismissRequest = {
             showAddDialog = false
@@ -2315,7 +2474,8 @@ fun AssignmentsAndProjectsScreen(onBack: () -> Unit) {
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Title") },
+                        label = { Text("Title *") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -2323,38 +2483,93 @@ fun AssignmentsAndProjectsScreen(onBack: () -> Unit) {
                         value = subject,
                         onValueChange = { subject = it },
                         label = { Text("Subject (e.g. Mathematics, Physics)") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = deadlineIso,
-                            onValueChange = { deadlineIso = it },
-                            label = { Text("Date (YYYY-MM-DD)") },
-                            modifier = Modifier.weight(1f)
-                        )
+                        OutlinedButton(
+                            onClick = { openEndDatePicker() },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1.2f).height(56.dp)
+                        ) {
+                            Icon(Icons.Default.CalendarToday, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column(horizontalAlignment = Alignment.Start) {
+                                Text("End Date", fontSize = 10.sp, color = GenesisColors.TextSecondary)
+                                Text(deadlineIso, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                            }
+                        }
                         OutlinedTextField(
                             value = maxMarksStr,
-                            onValueChange = { maxMarksStr = it },
-                            label = { Text("Max Marks") },
+                            onValueChange = { maxMarksStr = it.filter { ch -> ch.isDigit() }.take(3) },
+                            label = { Text("Marks") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
+                            singleLine = true,
+                            modifier = Modifier.weight(0.8f)
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = dueText,
-                        onValueChange = { dueText = it },
-                        label = { Text("Due Date Text") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = attachedDocName,
-                        onValueChange = { attachedDocName = it },
-                        label = { Text("Attached Document Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Attach PDF or Photos (Optional)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextSecondary)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { pdfPickerLauncher.launch("application/pdf") },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).height(44.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = GenesisColors.Emergency, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Upload PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                        }
+                        OutlinedButton(
+                            onClick = { multiImagePickerLauncher.launch("image/*") },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).height(44.dp)
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Photos", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary)
+                        }
+                    }
+                    if (selectedPdfUri != null || selectedImageUris.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = Color(0xFFEFF6FF),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = buildString {
+                                        if (selectedPdfUri != null) append("PDF: $attachedDocName")
+                                        if (selectedImageUris.isNotEmpty()) {
+                                            if (isNotEmpty()) append(" • ")
+                                            append("${selectedImageUris.size} photo(s) selected")
+                                        }
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GenesisColors.Primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    onClick = {
+                                        selectedPdfUri = null
+                                        selectedImageUris = emptyList()
+                                        attachedDocName = ""
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                ) {
+                                    Text("Clear", fontSize = 11.sp, color = GenesisColors.Emergency, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = instructions,
@@ -2379,27 +2594,7 @@ fun AssignmentsAndProjectsScreen(onBack: () -> Unit) {
                                     Toast.makeText(context, "Please enter a title", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val maxM = maxMarksStr.toIntOrNull() ?: 20
-                                val newItem = HomeworkItem(
-                                    id = editingItem?.id ?: "hw-${System.currentTimeMillis()}",
-                                    classId = currentClassFilter,
-                                    subject = subject.trim(),
-                                    title = title.trim(),
-                                    dueText = dueText.trim(),
-                                    status = "Pending",
-                                    instructions = instructions.trim(),
-                                    maxMarks = maxM,
-                                    deadlineDateIso = deadlineIso.trim(),
-                                    totalStudents = editingItem?.totalStudents ?: 40,
-                                    submittedCount = editingItem?.submittedCount ?: 0,
-                                    attachedDocName = attachedDocName.trim().ifBlank { null },
-                                    attachedDocSize = "1.5 MB",
-                                    projectType = projectType
-                                )
-                                DiscussionRepository.addOrUpdateHomework(newItem)
-                                Toast.makeText(context, if (editingItem != null) "Assignment updated!" else "Assignment added!", Toast.LENGTH_SHORT).show()
-                                showAddDialog = false
-                                showModifyDialog = null
+                                showConfirmAssign = true
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                         ) {
@@ -3634,17 +3829,22 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
 
     val isStaff = currentRole == AppRole.TEACHER || currentRole == AppRole.ADMIN
 
-    val academicYearMonths = remember {
-        (0..11).map { offset -> YearMonth.of(2026, 6).plusMonths(offset.toLong()) }
+    // Month & Year Dropdown state (supports years up to 2030)
+    val todayDate = remember { LocalDate.now() }
+    val yearOptions = remember { (2025..2030).toList() }
+    val monthNames = remember {
+        listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
     }
-    var currentMonthIndex by remember { mutableIntStateOf(5) } // Nov 2026
-    val activeMonth = academicYearMonths[currentMonthIndex]
-    var selectedDate by remember { mutableStateOf(LocalDate.of(2026, 11, 14)) }
+    var selectedYear by remember { mutableIntStateOf(todayDate.year.coerceIn(2025, 2030)) }
+    var selectedMonthNum by remember { mutableIntStateOf(todayDate.monthValue) }
+    val activeMonth = remember(selectedYear, selectedMonthNum) { YearMonth.of(selectedYear, selectedMonthNum) }
+    var selectedDate by remember { mutableStateOf(todayDate) }
     var showDeclareHolidayDialog by remember { mutableStateOf(false) }
+    var showAllYearHolidaysDialog by remember { mutableStateOf(false) }
+    var monthDropdownOpen by remember { mutableStateOf(false) }
+    var yearDropdownOpen by remember { mutableStateOf(false) }
 
     // Holidays visible on the calendar:
-    // - Students/Parents see only holidays that apply to their own class & section (or Total School).
-    // - Teachers/Admins see all declared school/class/section holidays so they can manage all of them.
     val visibleHolidays = remember(allHolidays, isStaff, activeStudent.classId, activeStudent.className) {
         if (isStaff) {
             allHolidays
@@ -3660,6 +3860,91 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
     }
     val holidaysByDate = remember(visibleHolidays) {
         visibleHolidays.groupBy { it.dateIso }
+    }
+
+    if (showAllYearHolidaysDialog) {
+        val yearStr = selectedYear.toString()
+        val yearHolidays = visibleHolidays.filter { it.dateIso.startsWith(yearStr) }.sortedBy { it.dateIso }
+        val yearEvents = events.filter { it.dateIso.startsWith(yearStr) }.sortedBy { it.dateIso }
+        Dialog(onDismissRequest = { showAllYearHolidaysDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 540.dp)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Holidays & Events ($selectedYear)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = GenesisColors.TextPrimary
+                        )
+                        IconButton(onClick = { showAllYearHolidaysDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = GenesisColors.TextSecondary)
+                        }
+                    }
+                    HorizontalDivider(color = GenesisColors.Border, thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (yearHolidays.isEmpty() && yearEvents.isEmpty()) {
+                            Text(
+                                text = "No holidays or events listed for $selectedYear yet.",
+                                fontSize = 13.sp,
+                                color = GenesisColors.TextSecondary,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        }
+                        yearHolidays.forEach { hol ->
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(hol.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                                        Text("${hol.dateIso} • ${hol.targetLabel}", fontSize = 12.sp, color = GenesisColors.Success)
+                                    }
+                                    if (isStaff) {
+                                        IconButton(onClick = {
+                                            DiscussionRepository.removeSchoolHoliday(hol.id)
+                                            Toast.makeText(context, "Removed holiday", Toast.LENGTH_SHORT).show()
+                                        }) {
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = "Remove", tint = GenesisColors.Emergency)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        yearEvents.forEach { ev ->
+                            Surface(
+                                color = Color(0xFFEFF6FF),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(ev.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                                    Text("${ev.dateLabel} • ${ev.category}", fontSize = 12.sp, color = GenesisColors.Primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showDeclareHolidayDialog) {
@@ -3681,11 +3966,11 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
                 )
                 runCatching { LocalDate.parse(dateIso) }.getOrNull()?.let { parsed ->
                     selectedDate = parsed
-                    val idx = academicYearMonths.indexOfFirst { it.year == parsed.year && it.month == parsed.month }
-                    if (idx >= 0) currentMonthIndex = idx
+                    selectedYear = parsed.year.coerceIn(2025, 2030)
+                    selectedMonthNum = parsed.monthValue
                 }
                 showDeclareHolidayDialog = false
-                Toast.makeText(context, "Holiday added ($targetLabel)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Holiday / Event added ($targetLabel)", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -3695,36 +3980,81 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
             .fillMaxSize()
             .background(GenesisColors.Background)
     ) {
-        SubScreenTopBar(title = "Academic Calendar 2026-27", onBack = onBack)
+        SubScreenTopBar(title = "Holidays & Calendar", onBack = onBack)
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
             item {
-                // Full-Year Month Quick Strip
+                // Month + Year (up to 2030) Dropdown Row
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    academicYearMonths.forEachIndexed { idx, ym ->
-                        val isChosen = idx == currentMonthIndex
-                        val label = "${ym.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} '${ym.year % 100}"
+                    Box(modifier = Modifier.weight(1.3f)) {
                         Surface(
-                            color = if (isChosen) GenesisColors.Primary else Color.White,
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(1.dp, if (isChosen) GenesisColors.Primary else GenesisColors.Border),
-                            modifier = Modifier.clickable { currentMonthIndex = idx }
+                            color = Color.White,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.2.dp, GenesisColors.Primary.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { monthDropdownOpen = true }
                         ) {
-                            Text(
-                                text = label,
-                                color = if (isChosen) Color.White else GenesisColors.TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Month", fontSize = 10.sp, color = GenesisColors.TextSecondary)
+                                    Text(monthNames[selectedMonthNum - 1], fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                                }
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Month", tint = GenesisColors.Primary)
+                            }
+                        }
+                        DropdownMenu(expanded = monthDropdownOpen, onDismissRequest = { monthDropdownOpen = false }, modifier = Modifier.background(Color.White)) {
+                            monthNames.forEachIndexed { idx, mName ->
+                                DropdownMenuItem(
+                                    text = { Text(mName, fontWeight = if (selectedMonthNum == idx + 1) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { selectedMonthNum = idx + 1; monthDropdownOpen = false }
+                                )
+                            }
+                        }
+                    }
+
+                    Box(modifier = Modifier.weight(0.9f)) {
+                        Surface(
+                            color = Color.White,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.2.dp, GenesisColors.Teal.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { yearDropdownOpen = true }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Year", fontSize = 10.sp, color = GenesisColors.TextSecondary)
+                                    Text(selectedYear.toString(), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                                }
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Year", tint = GenesisColors.Teal)
+                            }
+                        }
+                        DropdownMenu(expanded = yearDropdownOpen, onDismissRequest = { yearDropdownOpen = false }, modifier = Modifier.background(Color.White)) {
+                            yearOptions.forEach { yr ->
+                                DropdownMenuItem(
+                                    text = { Text(yr.toString(), fontWeight = if (selectedYear == yr) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { selectedYear = yr; yearDropdownOpen = false }
+                                )
+                            }
                         }
                     }
                 }
@@ -3739,38 +4069,13 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { if (currentMonthIndex > 0) currentMonthIndex-- },
-                                enabled = currentMonthIndex > 0
-                            ) {
-                                Icon(
-                                    Icons.Default.ChevronLeft,
-                                    contentDescription = "Previous Month",
-                                    tint = if (currentMonthIndex > 0) GenesisColors.Primary else GenesisColors.Border
-                                )
-                            }
-                            Text(
-                                text = "${activeMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${activeMonth.year}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = GenesisColors.TextPrimary
-                            )
-                            IconButton(
-                                onClick = { if (currentMonthIndex < academicYearMonths.lastIndex) currentMonthIndex++ },
-                                enabled = currentMonthIndex < academicYearMonths.lastIndex
-                            ) {
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = "Next Month",
-                                    tint = if (currentMonthIndex < academicYearMonths.lastIndex) GenesisColors.Primary else GenesisColors.Border
-                                )
-                            }
-                        }
+                        Text(
+                            text = "${activeMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${activeMonth.year}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = GenesisColors.TextPrimary,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -3900,126 +4205,26 @@ fun AcademicCalendarScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(18.dp))
             }
 
+            // Single Clean Button to View All Holidays / Events for the Selected Year (replaces cluttered inline lists)
             item {
-                Text(
-                    text = if (isStaff) "Declared Holidays (${visibleHolidays.size})" else "Holidays for ${activeStudent.classTitle}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = GenesisColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            items(visibleHolidays, key = { it.id }) { hol ->
-                val prettyDate = runCatching {
-                    LocalDate.parse(hol.dateIso).format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
-                }.getOrDefault(hol.dateIso)
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
+                OutlinedButton(
+                    onClick = { showAllYearHolidaysDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable {
-                            runCatching { LocalDate.parse(hol.dateIso) }.getOrNull()?.let { d ->
-                                selectedDate = d
-                                val idx = academicYearMonths.indexOfFirst { it.year == d.year && it.month == d.month }
-                                if (idx >= 0) currentMonthIndex = idx
-                            }
-                        }
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.2.dp, GenesisColors.Primary)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = Color(0xFF16A34A).copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = prettyDate,
-                                color = Color(0xFF14532D),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .width(88.dp)
-                                    .padding(vertical = 10.dp, horizontal = 6.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(hol.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = hol.targetLabel,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = GenesisColors.Success
-                            )
-                        }
-                        if (isStaff) {
-                            IconButton(
-                                onClick = {
-                                    DiscussionRepository.removeSchoolHoliday(hol.id)
-                                    Toast.makeText(context, "Removed holiday", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "Remove Holiday", tint = GenesisColors.Emergency)
-                            }
-                        }
-                    }
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = GenesisColors.Primary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "List All Holidays / Events ($selectedYear)",
+                        color = GenesisColors.Primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(18.dp))
-                Text("School Events & Exam Schedule", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = GenesisColors.TextPrimary)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            items(events, key = { it.id }) { ev ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GenesisColors.Border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = Color(0xFFEFF6FF),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = ev.dateLabel,
-                                color = GenesisColors.Primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .width(92.dp)
-                                    .padding(vertical = 10.dp, horizontal = 6.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            CategoryBadge(ev.category)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(ev.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

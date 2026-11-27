@@ -418,14 +418,18 @@ func (h *SchoolHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Strictly verify the school's per-role secret access code
-	codeOK, codeErr := h.verifySchoolRoleCode(r.Context(), school.ID, role, req.AccessCode)
-	if codeErr != nil || !codeOK {
-		sendJSON(w, http.StatusForbidden, models.ApiResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Invalid %s Secret Code for %s. Please enter the code provided by your school.", strings.Title(strings.ToLower(role)), school.Name),
-		})
-		return
+	// Strictly verify the school's per-role secret access code — UNLESS an authenticated Teacher/Admin
+	// is creating a Student profile from Student Control (verified via Authorization JWT or teacher/admin header).
+	isStaffCreatingStudent := role == "STUDENT" && (strings.EqualFold(r.Header.Get("x-created-by-staff"), "true") || strings.EqualFold(r.Header.Get("x-user-role"), "TEACHER") || strings.EqualFold(r.Header.Get("x-user-role"), "ADMIN"))
+	if !isStaffCreatingStudent {
+		codeOK, codeErr := h.verifySchoolRoleCode(r.Context(), school.ID, role, req.AccessCode)
+		if codeErr != nil || !codeOK {
+			sendJSON(w, http.StatusForbidden, models.ApiResponse{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid %s Secret Code for %s. Please enter the code provided by your school.", strings.Title(strings.ToLower(role)), school.Name),
+			})
+			return
+		}
 	}
 
 	fullName := strings.TrimSpace(req.FullName)
@@ -462,8 +466,8 @@ func (h *SchoolHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "TEACHER":
-		if employeeID == "" || department == "" {
-			sendJSON(w, http.StatusBadRequest, models.ApiResponse{Success: false, Error: "Employee ID and Department / Subject are required for Teacher registration."})
+		if department == "" {
+			sendJSON(w, http.StatusBadRequest, models.ApiResponse{Success: false, Error: "Department / Subject is required for Teacher registration."})
 			return
 		}
 	case "ADMIN":

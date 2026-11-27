@@ -151,35 +151,23 @@ private fun MyStaffProfileTab() {
             Spacer(modifier = Modifier.height(16.dp))
         }
         item {
-            SectionCard(title = "Contact") {
-                ProfileRow(Icons.Default.Phone, "Phone", me.phone.ifBlank { "—" })
-                ProfileRow(Icons.Default.Email, "Email", me.email.ifBlank { "—" })
+            // Show ONLY the details provided by the teacher at login time
+            SectionCard(title = "My Details") {
+                ProfileRow(Icons.Default.Person, "Full Name", me.name.ifBlank { "—" })
+                ProfileRow(Icons.Default.MenuBook, "Subject / Dept", me.department.ifBlank { me.subjects.ifBlank { "—" } })
+                ProfileRow(Icons.Default.Phone, "Mobile", me.phone.ifBlank { "—" })
+                if (me.email.isNotBlank()) {
+                    ProfileRow(Icons.Default.Email, "Email", me.email)
+                }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-        item {
-            SectionCard(title = "Employment") {
-                ProfileRow(Icons.Default.Badge, "Employee ID", me.employeeId.ifBlank { "—" })
-                ProfileRow(Icons.Default.Apartment, "Department", me.department)
-                ProfileRow(Icons.Default.School, "Qualification", me.qualification.ifBlank { "—" })
-                ProfileRow(Icons.Default.Event, "Joined", me.joiningDate.ifBlank { "—" })
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-        item {
-            SectionCard(title = "Teaching Load") {
-                ProfileRow(Icons.Default.MenuBook, "Subjects", me.subjects.ifBlank { "—" })
-                ProfileRow(Icons.Default.Groups, "Classes", me.classesAssigned)
-                ProfileRow(Icons.Default.Schedule, "Periods / Week", me.workloadPeriodsPerWeek.toString())
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
         item {
             OutlinedButton(
                 onClick = { showEditDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(46.dp),
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, GenesisColors.Primary)
             ) {
@@ -187,28 +175,69 @@ private fun MyStaffProfileTab() {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Edit Contact Details", color = GenesisColors.Primary, fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "Employee ID, department and classes are managed by the school office.",
-                fontSize = 12.sp,
-                color = GenesisColors.TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(22.dp))
-            Text(
-                text = "School Teachers & Staff (${colleagues.size})",
+                text = "School Teachers (${colleagues.size})",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = GenesisColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
+        // Colleagues list: Name, Subject/Department, and Present/Absent badge ONLY (non-clickable — no private details popup)
         items(colleagues, key = { it.id }) { colleague ->
-            StaffDirectoryRow(
-                staff = colleague,
-                onClick = { selectedColleague = colleague }
-            )
+            val isPresent = colleague.attendanceStatus.equals("Present", ignoreCase = true) || colleague.attendanceStatus.equals("Late", ignoreCase = true)
+            val statusText = if (isPresent) "Present" else "Absent"
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, GenesisColors.Border),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(GenesisColors.LightBlue, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = colleague.name.firstOrNull()?.uppercase() ?: "T",
+                            color = GenesisColors.Primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(colleague.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = GenesisColors.TextPrimary)
+                        Text(
+                            text = colleague.subjects.ifBlank { colleague.department },
+                            fontSize = 12.sp,
+                            color = GenesisColors.TextSecondary
+                        )
+                    }
+                    Surface(
+                        color = if (isPresent) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text(
+                            text = statusText,
+                            color = if (isPresent) GenesisColors.Success else GenesisColors.Emergency,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -574,22 +603,12 @@ private fun MyStaffAttendanceTab() {
         }
 
         item {
+            // Show ONLY Present, Late, Leave summary cards (Recent Days log list removed)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 SummaryStatCard("Present", presentCount.toString(), GenesisColors.Success, Modifier.weight(1f))
                 SummaryStatCard("Late", lateCount.toString(), GenesisColors.Warning, Modifier.weight(1f))
                 SummaryStatCard("Leave", leaveCount.toString(), GenesisColors.Primary, Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.height(20.dp))
-            Text("Recent Days", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = GenesisColors.TextPrimary)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        items(history, key = { it.id }) { day ->
-            AttendanceDayRow(
-                title = day.dateLabel,
-                subtitle = if (day.checkIn != null) "Captured at ${day.checkIn}" else "Not captured",
-                status = day.status
-            )
         }
     }
 }
@@ -611,10 +630,10 @@ private fun MyLeaveApplicationsTab() {
         ApplyStaffLeaveDialog(
             balance = balance,
             onDismiss = { showApplyDialog = false },
-            onSubmit = { type, startOffset, days, reason ->
-                DiscussionRepository.applyStaffLeave(currentStaffId, type, startOffset, days, reason)
+            onSubmitDates = { type, selectedDatesIso, reason ->
+                DiscussionRepository.applyStaffLeaveDates(currentStaffId, type, selectedDatesIso, reason)
                 showApplyDialog = false
-                Toast.makeText(context, "Leave request sent to Principal", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Leave request (${selectedDatesIso.size} day(s)) sent to Principal", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -681,15 +700,57 @@ private fun MyLeaveApplicationsTab() {
 private fun ApplyStaffLeaveDialog(
     balance: Map<String, Pair<Int, Int>>,
     onDismiss: () -> Unit,
-    onSubmit: (type: String, startOffsetDays: Int, days: Int, reason: String) -> Unit
+    onSubmitDates: (type: String, selectedDatesIso: List<String>, reason: String) -> Unit
 ) {
+    val today = remember { java.time.LocalDate.now() }
+    val yearOptions = remember { (2025..2030).toList() }
+    val monthNames = remember {
+        listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    }
+    var selectedYear by remember { mutableIntStateOf(today.year.coerceIn(2025, 2030)) }
+    var selectedMonth by remember { mutableIntStateOf(today.monthValue) }
+    var monthMenuOpen by remember { mutableStateOf(false) }
+    var yearMenuOpen by remember { mutableStateOf(false) }
+
+    var selectedDates by remember { mutableStateOf<Set<java.time.LocalDate>>(emptySet()) }
     var leaveType by remember { mutableStateOf(StaffLeavePolicy.annualQuota.keys.first()) }
-    var startOffset by remember { mutableIntStateOf(1) }
-    var days by remember { mutableIntStateOf(1) }
+    var leaveTypeMenuOpen by remember { mutableStateOf(false) }
     var reason by remember { mutableStateOf("") }
+    var showConfirmLeavePopup by remember { mutableStateOf(false) }
+
     val remaining = balance[leaveType]?.first ?: 0
-    val (fromLabel, toLabel) = DiscussionRepository.buildLeaveDateRange(startOffset, days)
-    val canSubmit = days <= remaining && reason.isNotBlank()
+    val selectedCount = selectedDates.size
+    val hasEnoughBalance = selectedCount > 0 && selectedCount <= remaining
+
+    if (showConfirmLeavePopup) {
+        AlertDialog(
+            onDismissRequest = { showConfirmLeavePopup = false },
+            title = { Text("Confirm Leave Request", fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary) },
+            text = {
+                Text(
+                    "Are you sure you want to apply for $selectedCount day(s) of $leaveType, or would you like to check again?",
+                    fontSize = 13.sp,
+                    color = GenesisColors.TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmLeavePopup = false
+                        onSubmitDates(leaveType, selectedDates.sorted().map { it.toString() }, reason)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
+                ) {
+                    Text("Apply", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmLeavePopup = false }) {
+                    Text("Check Again", color = GenesisColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -699,99 +760,193 @@ private fun ApplyStaffLeaveDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(18.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("Apply for Leave", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = GenesisColors.TextPrimary)
-                Spacer(modifier = Modifier.height(14.dp))
+                Text("Select Leave Dates", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = GenesisColors.TextPrimary)
+                Text("Tap any dates on the calendar (you can select multiple random dates).", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                Spacer(modifier = Modifier.height(12.dp))
 
-                FieldLabel("Leave Type")
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StaffLeavePolicy.annualQuota.keys.forEach { type ->
-                        ChoicePill(
-                            label = "${type.removeSuffix(" Leave")} (${balance[type]?.first ?: 0})",
-                            selected = leaveType == type,
-                            onClick = { leaveType = type }
+                // Month + Year (up to 2030) Dropdown Row
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { monthMenuOpen = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(40.dp)
+                        ) {
+                            Text(monthNames[selectedMonth - 1], fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary, fontSize = 13.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = GenesisColors.Primary)
+                        }
+                        DropdownMenu(expanded = monthMenuOpen, onDismissRequest = { monthMenuOpen = false }, modifier = Modifier.background(Color.White)) {
+                            monthNames.forEachIndexed { idx, mName ->
+                                DropdownMenuItem(
+                                    text = { Text(mName, fontWeight = if (selectedMonth == idx + 1) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { selectedMonth = idx + 1; monthMenuOpen = false }
+                                )
+                            }
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { yearMenuOpen = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(40.dp)
+                        ) {
+                            Text(selectedYear.toString(), fontWeight = FontWeight.Bold, color = GenesisColors.TextPrimary, fontSize = 13.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = GenesisColors.Primary)
+                        }
+                        DropdownMenu(expanded = yearMenuOpen, onDismissRequest = { yearMenuOpen = false }, modifier = Modifier.background(Color.White)) {
+                            yearOptions.forEach { yr ->
+                                DropdownMenuItem(
+                                    text = { Text(yr.toString(), fontWeight = if (selectedYear == yr) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { selectedYear = yr; yearMenuOpen = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Interactive Multi-Date Calendar Grid
+                val ym = java.time.YearMonth.of(selectedYear, selectedMonth)
+                val firstDayOffset = ym.atDay(1).dayOfWeek.value % 7 // Sun = 0
+                val daysInMonth = ym.lengthOfMonth()
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf("S", "M", "T", "W", "T", "F", "S").forEach { d ->
+                        Text(
+                            text = d,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GenesisColors.TextSecondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                FieldLabel("Starting")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "Today", 1 to "Tomorrow", 2 to "Day After").forEach { (offset, label) ->
-                        ChoicePill(label = label, selected = startOffset == offset, onClick = { startOffset = offset })
+                Spacer(modifier = Modifier.height(6.dp))
+                val totalCells = firstDayOffset + daysInMonth
+                val rows = (totalCells + 6) / 7
+                for (r in 0 until rows) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                        for (c in 0 until 7) {
+                            val cellIdx = r * 7 + c
+                            val dayNum = cellIdx - firstDayOffset + 1
+                            if (dayNum in 1..daysInMonth) {
+                                val dateObj = ym.atDay(dayNum)
+                                val isSel = dateObj in selectedDates
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(2.dp)
+                                        .height(34.dp)
+                                        .background(
+                                            if (isSel) GenesisColors.Primary else Color(0xFFF8FAFC),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            selectedDates = if (isSel) selectedDates - dateObj else selectedDates + dateObj
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = dayNum.toString(),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSel) Color.White else GenesisColors.TextPrimary
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                FieldLabel("Number of Days")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StepperButton(Icons.Default.Remove, enabled = days > 1) { days-- }
-                    Text(
-                        text = "$days",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = GenesisColors.TextPrimary,
-                        modifier = Modifier.padding(horizontal = 20.dp)
-                    )
-                    StepperButton(Icons.Default.Add, enabled = days < 30) { days++ }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = if (days == 1) fromLabel else "$fromLabel → $toLabel",
-                        fontSize = 12.sp,
-                        color = GenesisColors.TextSecondary,
-                        maxLines = 2
-                    )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Selected Count + Leave Type Dropdown Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = GenesisColors.LightBlue,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(0.95f)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text("Selected", fontSize = 10.sp, color = GenesisColors.TextSecondary)
+                            Text(
+                                text = "$selectedCount day(s)",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                color = GenesisColors.Primary
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1.35f)) {
+                        OutlinedButton(
+                            onClick = { leaveTypeMenuOpen = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(50.dp)
+                        ) {
+                            Text(
+                                text = "${leaveType.removeSuffix(" Leave")} ($remaining left)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GenesisColors.TextPrimary,
+                                maxLines = 1
+                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = GenesisColors.Primary)
+                        }
+                        DropdownMenu(expanded = leaveTypeMenuOpen, onDismissRequest = { leaveTypeMenuOpen = false }, modifier = Modifier.background(Color.White)) {
+                            StaffLeavePolicy.annualQuota.keys.forEach { type ->
+                                val rem = balance[type]?.first ?: 0
+                                DropdownMenuItem(
+                                    text = { Text("$type ($rem left)", fontWeight = if (leaveType == type) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { leaveType = type; leaveTypeMenuOpen = false }
+                                )
+                            }
+                        }
+                    }
                 }
-                if (days > remaining) {
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                if (selectedCount > remaining) {
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Only $remaining day(s) of ${leaveType} left",
+                        text = "Only $remaining day(s) of $leaveType available (you selected $selectedCount).",
                         fontSize = 12.sp,
                         color = GenesisColors.Emergency,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FieldLabel("Reason")
-                    VoiceCaptureChipButton(
-                        label = "Speak",
-                        promptHint = "Say your leave reason...",
-                        isAcademicText = false,
-                        onResultText = { spoken -> reason = mergeVoiceText(reason, spoken) }
-                    )
-                }
+                Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = reason,
                     onValueChange = { reason = it },
-                    placeholder = { Text("e.g. Medical appointment") },
+                    label = { Text("Reason (Optional)") },
+                    placeholder = { Text("Optional note...") },
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
+                    maxLines = 2,
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
                         Text("Cancel", color = GenesisColors.TextPrimary)
                     }
                     Button(
-                        onClick = { onSubmit(leaveType, startOffset, days, reason) },
-                        enabled = canSubmit,
+                        onClick = { showConfirmLeavePopup = true },
+                        enabled = hasEnoughBalance,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                     ) {
-                        Text("Submit", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Apply Leave", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }

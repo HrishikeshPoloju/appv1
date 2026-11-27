@@ -564,77 +564,6 @@ fun RoleSpecificSmartDashboardSection(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val teacherActions = listOf(
-                        Triple("Roll Call", Icons.Rounded.HowToReg, onOpenAttendance),
-                        Triple("Student Control ($pendingVerifications)", Icons.Rounded.VerifiedUser, onOpenSectionVerification),
-                        Triple("Marks & Grades", Icons.Rounded.Grade, onOpenMarksAutomation),
-                        Triple("Classes & Sections", Icons.Rounded.DomainAdd, onOpenClassAndYearManager),
-                        Triple("Staff Profiles", Icons.Rounded.Badge) { onOpenStaffHr(0) },
-                        Triple("Staff Attendance", Icons.Rounded.FactCheck) { onOpenStaffHr(1) },
-                        Triple(
-                            if (myPendingStaffLeaves > 0) "Staff Leave ($myPendingStaffLeaves)" else "Apply Leave",
-                            Icons.Rounded.EventBusy
-                        ) { onOpenStaffHr(2) },
-                        Triple("Holiday Calendar", Icons.Rounded.CalendarMonth, onOpenCalendar)
-                    )
-
-                    teacherActions.chunked(2).forEachIndexed { rowIdx, row ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = if (rowIdx == teacherActions.chunked(2).lastIndex) 0.dp else 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            row.forEachIndexed { colIdx, (label, icon, action) ->
-                                val isPrimaryAction = rowIdx < 2
-                                Surface(
-                                    color = GenesisColors.Background,
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, GenesisColors.Border),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(46.dp)
-                                        .clickable { action() }
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .background(
-                                                    if (isPrimaryAction) GenesisColors.LightBlue else Color(0xFFCCFBF1),
-                                                    RoundedCornerShape(8.dp)
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = icon,
-                                                contentDescription = label,
-                                                tint = if (isPrimaryAction) GenesisColors.Primary else GenesisColors.Teal,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = label,
-                                            color = GenesisColors.TextPrimary,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     if (currentRole == AppRole.ADMIN) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
@@ -950,6 +879,12 @@ fun SectionStudentVerificationScreen(
         }
         var phoneInput by remember(editing) { mutableStateOf(editing?.parentPhone ?: "+91 ") }
 
+        var studentPassword by remember { mutableStateOf("") }
+        var studentEmail by remember { mutableStateOf("") }
+        var studentAddress by remember { mutableStateOf("") }
+        var isSavingStudent by remember { mutableStateOf(false) }
+        var formError by remember { mutableStateOf<String?>(null) }
+
         Dialog(
             onDismissRequest = {
                 showAddStudentDialog = false
@@ -967,39 +902,48 @@ fun SectionStudentVerificationScreen(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
-                        text = if (editing != null) "Edit Student Data" else "Add Student to Roster",
+                        text = if (editing != null) "Edit Student Data" else "Create Student Account",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = GenesisColors.TextPrimary
                     )
+                    if (editing == null) {
+                        Text(
+                            text = "Create a student profile & password so the student can sign in later. You will remain logged in as Teacher.",
+                            fontSize = 12.sp,
+                            color = GenesisColors.TextSecondary
+                        )
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = nameInput,
-                        onValueChange = { nameInput = it },
-                        label = { Text("Student Full Name") },
+                        onValueChange = { nameInput = it; formError = null },
+                        label = { Text("Student Full Name *") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = rollInput,
-                            onValueChange = { rollInput = it },
-                            label = { Text("Roll No.") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
+                        if (editing != null) {
+                            OutlinedTextField(
+                                value = rollInput,
+                                onValueChange = { rollInput = it },
+                                label = { Text("Roll No.") },
+                                singleLine = true,
+                                modifier = Modifier.weight(0.9f)
+                            )
+                        }
                         OutlinedTextField(
                             value = classInput,
-                            onValueChange = { classInput = it },
-                            label = { Text("Class") },
+                            onValueChange = { classInput = it; formError = null },
+                            label = { Text("Class *") },
                             singleLine = true,
                             modifier = Modifier.weight(1.2f)
                         )
                         OutlinedTextField(
                             value = sectionInput,
-                            onValueChange = { sectionInput = it },
-                            label = { Text("Sec") },
+                            onValueChange = { sectionInput = it.uppercase().take(4); formError = null },
+                            label = { Text("Sec *") },
                             singleLine = true,
                             modifier = Modifier.weight(0.8f)
                         )
@@ -1007,12 +951,44 @@ fun SectionStudentVerificationScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = phoneInput,
-                        onValueChange = { phoneInput = it },
-                        label = { Text("Parent Mobile Number") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        onValueChange = { phoneInput = it.filter { ch -> ch.isDigit() }.take(10); formError = null },
+                        label = { Text("Parent 10-Digit Mobile *") },
+                        prefix = { Text("+91 ", fontWeight = FontWeight.Bold) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (editing == null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = studentPassword,
+                            onValueChange = { studentPassword = it; formError = null },
+                            label = { Text("Create Password for Student *") },
+                            placeholder = { Text("Min 4 characters") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = studentEmail,
+                            onValueChange = { studentEmail = it },
+                            label = { Text("Parent Email (Optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = studentAddress,
+                            onValueChange = { studentAddress = it },
+                            label = { Text("Residential Address (Optional)") },
+                            maxLines = 2,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (formError != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(formError!!, color = GenesisColors.Emergency, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(
@@ -1036,24 +1012,47 @@ fun SectionStudentVerificationScreen(
                                         parentPhone = phoneInput
                                     )
                                     Toast.makeText(context, "Updated $nameInput", Toast.LENGTH_SHORT).show()
-                                } else if (nameInput.isNotBlank()) {
-                                    DiscussionRepository.addStudentToSectionRoster(
-                                        fullName = nameInput,
-                                        rollNo = rollInput,
-                                        className = classInput,
-                                        section = sectionInput,
-                                        parentPhone = phoneInput
-                                    )
-                                    Toast.makeText(context, "Added $nameInput to roster", Toast.LENGTH_SHORT).show()
+                                    showAddStudentDialog = false
+                                    studentToEdit = null
+                                } else {
+                                    val digits = phoneInput.filter { it.isDigit() }
+                                    when {
+                                        nameInput.trim().length < 2 -> formError = "Enter student's full name."
+                                        digits.length != 10 -> formError = "Enter a valid 10-digit parent mobile number."
+                                        studentPassword.trim().length < 4 -> formError = "Create a password (min 4 chars)."
+                                        else -> {
+                                            isSavingStudent = true
+                                            DiscussionRepository.registerStudentByTeacher(
+                                                fullName = nameInput.trim(),
+                                                className = classInput.trim(),
+                                                section = sectionInput.trim().ifBlank { "A" },
+                                                parentPhone = "+91 $digits",
+                                                password = studentPassword.trim(),
+                                                parentEmail = studentEmail.trim(),
+                                                address = studentAddress.trim()
+                                            ) { ok, msg ->
+                                                isSavingStudent = false
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                if (ok) {
+                                                    showAddStudentDialog = false
+                                                    studentToEdit = null
+                                                } else {
+                                                    formError = msg
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                                showAddStudentDialog = false
-                                studentToEdit = null
                             },
-                            enabled = nameInput.isNotBlank(),
+                            enabled = !isSavingStudent && nameInput.isNotBlank(),
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = GenesisColors.Primary)
                         ) {
-                            Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isSavingStudent) "Saving..." else if (editing != null) "Save" else "Create Student",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }

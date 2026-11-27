@@ -1268,6 +1268,30 @@ fun TeacherMarksAutomationScreen(
                     }
                 }
             }
+
+            // Simple 4-Step Guide at Bottom for Teachers
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, GenesisColors.Border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "How Auto Marks Works (4 Simple Steps)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = GenesisColors.TextPrimary
+                        )
+                        Text("1. Choose Class & Section from the 2 dropdowns above.", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                        Text("2. Select the Exam (e.g. Unit Test 1 / Term 1) and Subject.", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                        Text("3. Type marks for each student — grades & % calculate automatically.", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                        Text("4. Tap Save Marks, then open Report Cards to approve & publish.", fontSize = 12.sp, color = GenesisColors.TextSecondary)
+                    }
+                }
+            }
         }
     }
 }

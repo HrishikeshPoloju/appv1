@@ -960,7 +960,6 @@ private fun AdminShortcutTilesGrid(
         ShortcutTileData("Roll Call", Icons.Rounded.HowToReg, GenesisColors.Primary, GenesisColors.LightBlue, badgeText = "<60s"),
         ShortcutTileData("Auto Marks", Icons.Rounded.Grade, GenesisColors.Primary, GenesisColors.LightBlue, badgeText = "Auto"),
         ShortcutTileData("Assignments", Icons.Rounded.Assignment, GenesisColors.Teal, Color(0xFFCCFBF1)),
-        ShortcutTileData("Exam Schedule", Icons.Rounded.CalendarMonth, GenesisColors.Teal, Color(0xFFCCFBF1)),
         ShortcutTileData("Fee Structure", Icons.Rounded.CurrencyRupee, GenesisColors.Primary, GenesisColors.LightBlue),
         ShortcutTileData("Digital ID", Icons.Rounded.Badge, GenesisColors.Teal, Color(0xFFCCFBF1)),
         ShortcutTileData("Calendar", Icons.Rounded.EventNote, GenesisColors.Teal, Color(0xFFCCFBF1)),
@@ -973,12 +972,11 @@ private fun AdminShortcutTilesGrid(
 private fun TeacherShortcutTilesGrid(
     onShortcutClick: (String) -> Unit
 ) {
-    // 10 cleanly extracted 3D teacher icons with transparent backgrounds on crisp white cards
+    // 9 cleanly extracted 3D teacher icons (3x3 grid — Exam Schedule removed)
     val tiles = listOf(
         ShortcutTileData("Roll Call", Icons.Rounded.HowToReg, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_roll_call),
         ShortcutTileData("Auto Marks", Icons.Rounded.Grade, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_auto_marks),
         ShortcutTileData("Assignments", Icons.Rounded.Assignment, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_assignments),
-        ShortcutTileData("Exam Schedule", Icons.Rounded.CalendarMonth, GenesisColors.Primary, Color.Transparent, iconRes = R.drawable.ic_teacher_exam_schedule),
         ShortcutTileData("Student Control", Icons.Rounded.VerifiedUser, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_student_control),
         ShortcutTileData("My Attendance", Icons.Rounded.Fingerprint, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_my_attendance),
         ShortcutTileData("Staff Leave", Icons.Rounded.EventBusy, GenesisColors.Teal, Color.Transparent, iconRes = R.drawable.ic_teacher_staff_leave),
